@@ -65,3 +65,21 @@ Setup: `npm run dev` + `npm run bridge` (real `SERIAL_PORT`), `DEMO_MODE=1` in `
 curl -i -X POST localhost:3000/api/cron/daily                          # no CRON_SECRET bearer
 curl -i -X POST localhost:3000/api/demo/reset                          # no CRON_SECRET bearer
 ```
+
+---
+
+## Phase 7B — HTTPS tunnel (needed for phone /hunter, Watch, Shortcuts)
+
+`next.config.ts` already allows `*.trycloudflare.com` (and `PUBLIC_URL`'s host) as dev origins.
+
+- [ ] `brew install cloudflared`
+- [ ] Terminal: `npm run dev` · another terminal: `npm run tunnel`
+      → copy the `https://<words>.trycloudflare.com` URL it prints.
+- [ ] Put it in `.env.local` as `PUBLIC_URL=https://<words>.trycloudflare.com` (changes on every tunnel restart —
+      update the Shortcut / Watch app / phone bookmark too).
+- [ ] From the phone (cellular, not laptop Wi-Fi): open `PUBLIC_URL/api/leaderboard` → JSON with `"success":true`.
+- [ ] Token check from anywhere: `curl -i -X POST $PUBLIC_URL/api/cron/daily` → **401**;
+      with `-H "Authorization: Bearer $CRON_SECRET"` → 200.
+- [ ] ⚠️ `.env.local` has **two** `CRON_SECRET=` and **two** `SYNC_TOKEN=` lines with different values. The last one wins.
+      Delete the stale pair so the Shortcut/Watch/Maritime all use the same value.
+- [ ] Later: deploy to Vercel for the public leaderboard (set the same env vars there).

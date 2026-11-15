@@ -10,7 +10,8 @@
     "sim": "tsx bridge/simulator.ts",
     "test": "vitest run",
     "bridge": "tsx bridge/serial.ts",
-    "demo:reset": "tsx scripts/demo-reset.ts"
+    "demo:reset": "tsx scripts/demo-reset.ts",
+    "tunnel": "cloudflared tunnel --url http://localhost:3000"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
