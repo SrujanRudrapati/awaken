@@ -6,12 +6,14 @@
  * and replaces `dynamic = 'force-dynamic'` — `await connection()` keeps this at request time.
  */
 import { connection } from 'next/server';
+import { startVoice } from '../../../engine/agents/voice';
 import { subscribe } from '../../../lib/bus';
 
 const HEARTBEAT_MS = 15_000;
 
 export async function GET(request: Request): Promise<Response> {
   await connection();
+  startVoice(); // the System speaks while someone is watching
 
   const encoder = new TextEncoder();
   let cleanup: () => void = () => {};
