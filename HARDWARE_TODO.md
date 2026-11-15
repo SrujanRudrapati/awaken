@@ -114,7 +114,11 @@ curl -i -X POST localhost:3000/api/demo/reset                          # no CRON
 
 `next.config.ts` already allows `*.trycloudflare.com` (and `PUBLIC_URL`'s host) as dev origins.
 
-- [ ] `brew install cloudflared`
+- [x] 2026-11-15 00:10: cloudflared 2026.11.0 installed; tunnel → `https://reform-impaired-wives-marion.trycloudflare.com` (set as PUBLIC_URL).
+      Verified: /api/leaderboard 200, /hunter 200, /api/health and /api/demo/reset 401 without secrets. It was started from
+      Claude's session — if it dies, run `npm run tunnel` yourself and update PUBLIC_URL + the Shortcut/Watch URLs.
+      Note: this Mac's DNS cached the new name as missing for a while (phones on cellular resolve fine); `dscacheutil -flushcache` fixes it.
+- [x] `brew install cloudflared`
 - [ ] Terminal: `npm run dev` · another terminal: `npm run tunnel`
       → copy the `https://<words>.trycloudflare.com` URL it prints.
 - [ ] Put it in `.env.local` as `PUBLIC_URL=https://<words>.trycloudflare.com` (changes on every tunnel restart —

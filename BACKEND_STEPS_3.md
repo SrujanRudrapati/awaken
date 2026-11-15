@@ -38,25 +38,25 @@ Model: Opus 5.5 by default. Fable 5.2 only where marked 🧠.
 - [ ] Test emergency quest end-to-end on pad. ✅ commit
 
 ## PHASE 7B — Deploy HTTPS (10:45–11:05)  ⚠️ needed for phone, Watch, Shortcuts
-- [ ] Easiest for live hardware: **cloudflared tunnel from the demo laptop**:
+- [x] Easiest for live hardware: **cloudflared tunnel from the demo laptop**:
   ```bash
   brew install cloudflared
   cloudflared tunnel --url http://localhost:3000
   ```
   → copy the `https://….trycloudflare.com` URL = `PUBLIC_URL` (changes on restart; that's OK).
 - [ ] Also deploy to Vercel later for the public leaderboard page.
-- [ ] Add `SYNC_TOKEN` (random string) + `PUBLIC_URL` to .env.local.
+- [x] Add `SYNC_TOKEN` (random string) + `PUBLIC_URL` to .env.local.
 
 ## PHASE 7C — Phone sensor + Watch notifications + Health sync (11:05 PM–12:30 AM)
-- [ ] **Phone `/hunter` page** 💬 *"app/hunter: mobile-first System-window glass page. Button 'AWAKEN' → request DeviceMotionEvent.requestPermission() (iOS), then stream accelerationIncludingGravity ~30 Hz, batched every 200 ms to POST /api/readings with source 'phone'. Show active quest, live rep count, rep.rejected flashes, level-up animation (subscribe to /api/stream). Big, readable, works in an armband."* → test on a real iPhone via PUBLIC_URL.
-- [ ] **Watch notifications** 💬 *"lib/notify.ts: push(title, message, priority) via ntfy (POST https://ntfy.sh/${NTFY_TOPIC}). Call on new daily quests ('[DAILY QUEST HAS ARRIVED]'), emergency quest, penalty warning, quest complete, level up."* → install **ntfy** app on iPhone, subscribe to the topic (use a long random topic name), allow notifications, check they mirror to the Watch.
-- [ ] **Health sync endpoint** 💬 *"POST /api/health with X-Sync-Token, body {date, steps, distanceKm, activeKcal, workoutMinutes, sleepHours, avgHeartRate?}; zod; log to Tiger; auto-complete matching quests (run/steps/workout/sleep) with voice + levelup + notify."*
+- [x] **Phone `/hunter` page** 💬 *"app/hunter: mobile-first System-window glass page. Button 'AWAKEN' → request DeviceMotionEvent.requestPermission() (iOS), then stream accelerationIncludingGravity ~30 Hz, batched every 200 ms to POST /api/readings with source 'phone'. Show active quest, live rep count, rep.rejected flashes, level-up animation (subscribe to /api/stream). Big, readable, works in an armband."* → test on a real iPhone via PUBLIC_URL.
+- [x] **Watch notifications** 💬 *"lib/notify.ts: push(title, message, priority) via ntfy (POST https://ntfy.sh/${NTFY_TOPIC}). Call on new daily quests ('[DAILY QUEST HAS ARRIVED]'), emergency quest, penalty warning, quest complete, level up."* → install **ntfy** app on iPhone, subscribe to the topic (use a long random topic name), allow notifications, check they mirror to the Watch.
+- [x] **Health sync endpoint** 💬 *"POST /api/health with X-Sync-Token, body {date, steps, distanceKm, activeKcal, workoutMinutes, sleepHours, avgHeartRate?}; zod; log to Tiger; auto-complete matching quests (run/steps/workout/sleep) with voice + levelup + notify."*
 - [ ] **iPhone Shortcut** (teammate, no code): Shortcuts → New → *Find Health Samples* (steps today, walking+running distance today, active energy today, sleep yesterday, workouts today) → *Get Contents of URL* `PUBLIC_URL/api/health`, Method POST, header X-Sync-Token, JSON body → name it "Sync with System". Optional: Automation → when a workout ends / at 9 PM → run it. Test once.
-- [ ] **Watch app endpoint** 💬 *"POST /api/watch {playerId, event:'rep'|'quest.complete', exercise, count} with X-Sync-Token → router (source 'watch')."*
+- [x] **Watch app endpoint** 💬 *"POST /api/watch {playerId, event:'rep'|'quest.complete', exercise, count} with X-Sync-Token → router (source 'watch')."*
 - ✅ commit after each
 
 ## PHASE 8 — Phone Jail + timers (12:30–1:00 AM)
-- [ ] 💬 *"verifiers/jail.ts: wait jail=1 (IR) → LOCK → count while jail=1 (1-s flicker grace) → early removal = fail + UNLOCK → done = UNLOCK + 'quiz.ready'. Demo 20 s, SEG countdown. verifiers/meditate.ts (btn=1 + snd below baseline+margin, 2-s grace). verifiers/lightsout.ts (light below calibrated threshold before deadline)."*
+- [x] 💬 *"verifiers/jail.ts: wait jail=1 (IR) → LOCK → count while jail=1 (1-s flicker grace) → early removal = fail + UNLOCK → done = UNLOCK + 'quiz.ready'. Demo 20 s, SEG countdown. verifiers/meditate.ts (btn=1 + snd below baseline+margin, 2-s grace). verifiers/lightsout.ts (light below calibrated threshold before deadline)."*
 - ✅ commit
 
 ## PHASE 9 — AI + AWS (1:00–2:30 AM)
