@@ -142,7 +142,7 @@ nothing until the next answer (the server closes the stage then).
   removes them.
 - Left alone on purpose: the uncommitted `package.json` change (`allowScripts`) and the untracked `design/` folder
   were there before the run and are not part of any commit.
-- A dev server from this worktree is still running on port 3100.
+- The dev server this run used (port 3100) has been stopped; your own server on port 3000 was never touched.
 
 ## Where things live
 
