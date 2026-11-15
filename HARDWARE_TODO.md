@@ -192,3 +192,57 @@ No hardware? `npm run sim jail | meditate | lightsout` exercises each verifier e
       Wi-Fi off → the line is a canned one (still instant).
 - [ ] Focus quiz after a jail session: `POST /api/quiz {"playerId","questId","topic":"what you studied"}` →
       3 questions; `POST /api/quiz/answer {"answers":[i,i,i]}` → ≥2 right completes it (+INT).
+- [x] Quest designer live call: `npm run smoke:designer` (verified 2026-11-14: Gemini picked meditate/quiz/sleep/pushup for a FOCUS/INT-weak player, ~1.3 s).
+- [x] `npm run db:migrate` (adds nullable `events.detail jsonb` for photo verdict reasons) — applied to Tiger 2026-11-14.
+      Re-run it on any other database; until then `logEvent` just drops `detail` and logs one warning.
+
+### AWS setup (all optional — without it: local photo storage, browser speech, Anthropic API)
+
+Everything is gated on env vars; nothing breaks if a step is skipped. Put the values in `.env.local`
+(never commit them) and restart `npm run dev`.
+
+- [ ] **IAM user** for the app (not root). Create an access key → `.env.local`:
+  ```
+  AWS_REGION=us-east-1
+  AWS_ACCESS_KEY_ID=...
+  AWS_SECRET_ACCESS_KEY=...
+  ```
+  Least-privilege inline policy (replace the bucket name):
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject"], "Resource": "arn:aws:s3:::awaken-proofs-XXXX/proofs/*" },
+      { "Effect": "Allow", "Action": "polly:SynthesizeSpeech", "Resource": "*" },
+      { "Effect": "Allow", "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], "Resource": "*" }
+    ]
+  }
+  ```
+- [ ] **S3 proof bucket** in the same region: keep **Block all public access ON** (default), default encryption SSE-S3.
+      No bucket policy needed — the app only uses presigned GET URLs (15 min). → `S3_PROOF_BUCKET=awaken-proofs-XXXX`
+- [ ] **Photo check:** start a photo quest and upload:
+  ```bash
+  curl -X POST localhost:3000/api/quest/start -H 'content-type: application/json' \
+    -d '{"playerId":"demo-jin","type":"photo","title":"Make your bed"}'          # note the quest id
+  curl -X POST localhost:3000/api/photo -F playerId=demo-jin -F questId=<id> -F photo=@bed.jpg
+  ```
+  Expect `"storage":"s3"` and a `photoUrl` that opens in a browser (and stops working after 15 min).
+  A random photo → `"passed":false` with a reason, quest stays active (retry allowed).
+  In Tiger: `select kind, value, verified, detail from events where kind='photo.verdict' order by ts desc limit 3;`
+  Without AWS: `"storage":"local"`, file under `/tmp/awaken-proofs/` (`PROOF_LOCAL_DIR` to change).
+- [ ] **Polly voice:** pick a neural voice (deep: `Matthew`, `Gregory`, `Stephen`; default `Matthew`) → `POLLY_VOICE=Gregory`.
+      Then `npm run voice:pregen` → every canned line `ok`. Trigger a level-up → the `voice` event has
+      `"audioUrl":"/api/voice/<hash>.mp3"`; open `localhost:3000<audioUrl>` → it plays.
+      Cache dir `/tmp/awaken-voice` (`VOICE_CACHE_DIR`); re-run `voice:pregen` after changing the voice.
+- [ ] **Frontend (teammate):** on each `voice` SSE event call `playVoice(event)` from `lib/voicePlayback.ts`
+      (Polly MP3 if present, else browser `speechSynthesis`). Browsers block audio until the first click/tap —
+      have a "Begin" button on the first screen.
+- [ ] **Bedrock:** console → Bedrock → *Model access* → enable Claude Haiku 5.5 and Opus 5.5 (wait for "Access granted").
+      Copy each model's id or cross-region inference profile id (e.g. `us.anthropic.claude-opus-...`):
+      ```
+      BEDROCK_MODEL_HAIKU=...
+      BEDROCK_MODEL_OPUS=...
+      ```
+      (Never a Fable id — the code refuses it.) Keep `ANTHROPIC_API_KEY` set: it's the fallback if Bedrock errors.
+- [ ] **Boss report:** `curl localhost:3000/api/report/demo-jin` → `"source":"opus"` (~5 s first time, cached 10 min;
+      `?fresh=1` to regenerate). Wi-Fi off → `"source":"fallback"` with a code-written report.
