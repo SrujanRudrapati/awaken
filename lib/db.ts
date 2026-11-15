@@ -29,6 +29,8 @@ export interface GameEvent {
   verified?: boolean;
   source: EventSource;
   ts?: Date;
+  /** Free-form context (e.g. a photo verdict's reason). Stored in `events.detail` (jsonb). */
+  detail?: Record<string, unknown>;
 }
 
 export interface LeaderboardRow {
@@ -78,6 +80,7 @@ function getPool(): Pool | null {
 /** Test hook: forget the pool so the next call re-reads the env. */
 export function resetDb(): void {
   globalForDb.__awakenPool = undefined;
+  detailColumnMissing = false;
 }
 
 async function query<T extends QueryResultRow>(sql: string, params: unknown[] = []): Promise<T[] | null> {
@@ -181,22 +184,50 @@ export async function updatePlayer(id: string, patch: PlayerPatch): Promise<Play
 // ── Events ──────────────────────────────────────────────────────────────────
 
 let warnedLogFailure = false;
+let detailColumnMissing = false;
+
+/** Postgres "undefined_column": `events.detail` hasn't been added yet (npm run db:migrate). */
+const UNDEFINED_COLUMN = '42703';
+
+function insertEvent(event: GameEvent, withDetail: boolean): Promise<unknown> {
+  const params: unknown[] = [
+    event.ts ?? new Date(),
+    event.playerId,
+    event.stat ?? null,
+    event.kind,
+    event.value ?? 1,
+    event.verified ?? true,
+    event.source,
+  ];
+  if (!withDetail) {
+    return query(
+      `INSERT INTO events (ts, player_id, stat, kind, value, verified, source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      params,
+    );
+  }
+  return query(
+    `INSERT INTO events (ts, player_id, stat, kind, value, verified, source, detail)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [...params, JSON.stringify(event.detail)],
+  );
+}
+
+async function insertWithFallback(event: GameEvent): Promise<void> {
+  const withDetail = event.detail !== undefined && !detailColumnMissing;
+  try {
+    await insertEvent(event, withDetail);
+  } catch (error) {
+    if (!withDetail || (error as { code?: string }).code !== UNDEFINED_COLUMN) throw error;
+    detailColumnMissing = true;
+    console.warn('[db] events.detail column missing — run `npm run db:migrate`; logging without detail');
+    await insertEvent(event, false);
+  }
+}
 
 /** Fire-and-forget insert into `events`. Never throws; logs the first failure of an outage. */
 export function logEvent(event: GameEvent): void {
-  query(
-    `INSERT INTO events (ts, player_id, stat, kind, value, verified, source)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      event.ts ?? new Date(),
-      event.playerId,
-      event.stat ?? null,
-      event.kind,
-      event.value ?? 1,
-      event.verified ?? true,
-      event.source,
-    ],
-  )
+  insertWithFallback(event)
     .then(() => {
       warnedLogFailure = false;
     })
@@ -204,6 +235,16 @@ export function logEvent(event: GameEvent): void {
       if (!warnedLogFailure) console.error('[db] logEvent failed:', error instanceof Error ? error.message : error);
       warnedLogFailure = true;
     });
+}
+
+/** Idempotent, additive schema changes on top of SPEC's tables. Null when no database. */
+export async function migrate(): Promise<string[] | null> {
+  const statements = ['ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb'];
+  for (const sql of statements) {
+    if ((await query(sql)) === null) return null;
+  }
+  detailColumnMissing = false;
+  return statements;
 }
 
 // ── Demo reset ──────────────────────────────────────────────────────────────

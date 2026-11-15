@@ -131,6 +131,7 @@ Laptop → Home Base (one per line, `DeviceCommandSchema`): `SEG:<4 chars>`, `LO
 ```sql
 CREATE TABLE events (ts timestamptz NOT NULL, player_id text, stat text, kind text,
   value real, verified boolean, source text); -- source: sensor|photo|quiz|gate
+ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb; -- npm run db:migrate (photo verdict reason etc.)
 SELECT create_hypertable('events', by_range('ts'));
 -- continuous aggregates: daily XP per stat per player; weekly reps; leaderboard
 ```

@@ -12,10 +12,15 @@
     "bridge": "tsx bridge/serial.ts",
     "demo:reset": "tsx scripts/demo-reset.ts",
     "tunnel": "cloudflared tunnel --url http://localhost:3000",
-    "smoke:designer": "tsx scripts/smoke-designer.ts"
+    "smoke:designer": "tsx scripts/smoke-designer.ts",
+    "db:migrate": "tsx scripts/migrate.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@aws-sdk/client-bedrock-runtime": "3.1169.0",
+    "@aws-sdk/client-polly": "3.1169.0",
+    "@aws-sdk/client-s3": "3.1169.0",
+    "@aws-sdk/s3-request-presigner": "3.1169.0",
     "@google/genai": "^3.3.0",
     "@serialport/parser-readline": "^13.0.0",
     "framer-motion": "^14.14.0",

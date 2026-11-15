@@ -22,6 +22,7 @@ import {
   getPlayer,
   leaderboard,
   logEvent,
+  migrate,
   resetDb,
   rowToPlayer,
   statHistory,
@@ -121,6 +122,44 @@ describe('db', () => {
     expect(params.slice(1)).toEqual(['p1', 'STR', 'xp', 30, true, 'engine']);
     expect(error).toHaveBeenCalledTimes(1); // once per outage
     error.mockRestore();
+  });
+
+  it('logEvent stores detail as jsonb when given', async () => {
+    queryMock.mockResolvedValue({ rows: [] });
+
+    logEvent({ playerId: 'p1', kind: 'photo.verdict', value: 0.9, source: 'photo', detail: { reason: 'Desk is clean' } });
+    await flush();
+
+    const [sql, params] = queryMock.mock.calls[0];
+    expect(sql).toMatch(/source, detail\)/);
+    expect(params.at(-1)).toBe('{"reason":"Desk is clean"}');
+  });
+
+  it('logEvent retries without detail when the column is missing, then stops asking for it', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    queryMock.mockRejectedValueOnce(Object.assign(new Error('column "detail" does not exist'), { code: '42703' }));
+    queryMock.mockResolvedValue({ rows: [] });
+
+    logEvent({ playerId: 'p1', kind: 'photo.verdict', source: 'photo', detail: { reason: 'x' } });
+    await flush();
+    logEvent({ playerId: 'p1', kind: 'photo.verdict', source: 'photo', detail: { reason: 'y' } });
+    await flush();
+
+    const sqls = queryMock.mock.calls.map(([sql]) => sql as string);
+    expect(sqls[0]).toMatch(/detail/);
+    expect(sqls[1]).not.toMatch(/detail/);
+    expect(sqls[2]).not.toMatch(/detail/);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('migrate adds the nullable detail column idempotently (null without a database)', async () => {
+    queryMock.mockResolvedValue({ rows: [] });
+    expect(await migrate()).toEqual(['ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb']);
+
+    delete process.env.TIGER_DATABASE_URL;
+    resetDb();
+    expect(await migrate()).toBeNull();
   });
 
   it('leaderboard returns compact rows in query order', async () => {
