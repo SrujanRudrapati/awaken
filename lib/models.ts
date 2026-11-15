@@ -7,8 +7,12 @@ export const OPUS = 'claude-opus-5-5'; // boss / weekly report
 
 const DEFAULT_GEMINI = 'gemini-2.5-flash';
 
-function assertNotFable(id: string): string {
-  if (/fable/i.test(id)) throw new Error(`Fable models are not allowed at runtime (got ${id})`);
+export function isFable(id: string): boolean {
+  return /fable/i.test(id);
+}
+
+export function assertNotFable(id: string): string {
+  if (isFable(id)) throw new Error(`Fable models are not allowed at runtime (got ${id})`);
   return id;
 }
 
