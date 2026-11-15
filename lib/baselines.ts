@@ -49,6 +49,11 @@ export async function getBaselines(playerId: string): Promise<Baselines | null> 
   return store().get(playerId) ?? null;
 }
 
+/** Forgets matching baselines (demo reset). */
+export function forgetBaselines(shouldForget: (playerId: string) => boolean): void {
+  [...store().keys()].filter(shouldForget).forEach((id) => store().delete(id));
+}
+
 /** Test hook. */
 export function resetBaselines(): void {
   globalForBaselines.__awakenBaselines = undefined;

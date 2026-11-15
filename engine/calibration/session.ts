@@ -435,6 +435,18 @@ export async function calibrationFor(playerId: string): Promise<CalibrationResul
 }
 
 /** Test hook. */
+/** Forgets matching people's Calibration sessions (timers stopped) and results (demo reset). */
+export function forgetCalibration(shouldForget: (playerId: string) => boolean): void {
+  const s = globalForCalibration.__awakenCalibration;
+  if (!s) return;
+  [...s.sessions.entries()].filter(([id]) => shouldForget(id)).forEach(([id, session]) => {
+    Object.values(session.sensor).forEach((stage) => stage && clearTimeout(stage.timer));
+    if (session.mind) clearTimeout(session.mind.timer);
+    s.sessions.delete(id);
+  });
+  [...s.latest.keys()].filter(shouldForget).forEach((id) => s.latest.delete(id));
+}
+
 export function resetCalibration(): void {
   const s = globalForCalibration.__awakenCalibration;
   s?.sessions.forEach((session) => {

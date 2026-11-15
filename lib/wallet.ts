@@ -72,6 +72,11 @@ export function consumeShield(playerId: string): boolean {
   return true;
 }
 
+/** Forgets matching wallets in memory (demo reset; Tiger rows are deleted by db.deleteDemoPlayers). */
+export function forgetWallets(shouldForget: (playerId: string) => boolean): void {
+  [...wallets().keys()].filter(shouldForget).forEach((id) => wallets().delete(id));
+}
+
 /** Test hook. */
 export function resetWallets(): void {
   globalForWallet.__awakenWallets = undefined;

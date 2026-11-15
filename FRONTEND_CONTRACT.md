@@ -400,3 +400,5 @@ Response: `{ "playerId", "added": 17, "lastNight": NightSummary, "vows": [{ "que
 `npm run demo:reset` · `npm run demo:seed-others -- <id>` · `npm run demo:sleep -- <id> --tonight [--short]` ·
 `npm run hw:check` · `npm run voice:pregen`. `DEMO_MODE=1`: Phone Jail / reading = 20 s, Calibration can be redone, the first
 urgent vow guarantees a rank-up — and that Proof is kept off the leaderboard unless `?includeDemo=1`.
+`demo:reset` wipes `demo-…`/`test-…` people completely (vows, sessions, Shards, baselines, Calibrations, nights) and
+**re-arms the rank-up**: the next urgent vow after a reset ranks its keeper up (it stays armed through misses until one is kept).

@@ -73,12 +73,14 @@ interface EngineState {
   players: Map<string, Player>;
   quests: Map<string, Quest>;
   timers: Map<string, ReturnType<typeof setInterval>>;
+  /** DEMO_MODE: the next urgent vow pays a rank-up, until one is kept (set by demo:reset). */
+  rankUpArmed: boolean;
 }
 
 const globalForEngine = globalThis as typeof globalThis & { __awakenEngine?: EngineState };
 
 function getState(): EngineState {
-  globalForEngine.__awakenEngine ??= { players: new Map(), quests: new Map(), timers: new Map() };
+  globalForEngine.__awakenEngine ??= { players: new Map(), quests: new Map(), timers: new Map(), rankUpArmed: false };
   return globalForEngine.__awakenEngine;
 }
 
@@ -502,6 +504,7 @@ async function awardQuest(playerId: string, questId: string, options: CompleteOp
   const quest = storeQuest({ ...active, status: 'done', progress: Math.max(active.progress, active.target), xp: Math.round(active.xp * scale) + bonus });
 
   const penaltyCleared = quest.kind === 'penalty' && !hasActivePenaltyQuest(playerId);
+  if (quest.kind === 'emergency') getState().rankUpArmed = false; // the guaranteed rank-up is spent once kept
   db.logEvent({ playerId, kind: 'quest.complete', stat: quest.stat, value: 1, source: 'engine' });
   publish({ type: 'quest.complete', quest, xpGained: quest.xp });
   notify({ title: '[VOW KEPT]', message: `${quest.title} · +${quest.xp} Proof`, tags: ['white_check_mark'] });
@@ -686,6 +689,20 @@ function activeEmergency(playerId: string): Quest | undefined {
   return listQuests(playerId).find((q) => q.status === 'active' && q.kind === 'emergency' && getState().timers.has(q.id));
 }
 
+/** DEMO_MODE: after a demo:reset, the next urgent vow (anyone's, any rank) pays a rank-up until one is kept. */
+export function armDemoRankUp(): void {
+  getState().rankUpArmed = true;
+}
+
+export function isRankUpArmed(): boolean {
+  return getState().rankUpArmed;
+}
+
+/** All quest ids of people matching `shouldPick` (e.g. to forget their trials on a demo reset). */
+export function questIdsOf(shouldPick: (playerId: string) => boolean): string[] {
+  return [...getState().quests.values()].filter((q) => shouldPick(q.playerId)).map((q) => q.id);
+}
+
 /** DEMO_MODE=1: a brand-new player's first emergency quest is worth a rank-up (stage demo). */
 export function isDemoMode(): boolean {
   return process.env.DEMO_MODE === '1';
@@ -701,6 +718,7 @@ export async function emergencyQuest(playerId: string, type: QuestType = 'pushup
   if (running) return running;
 
   const brandNew = player.rank === 'E' && !listQuests(playerId).some((q) => q.kind === 'emergency');
+  const guaranteed = isDemoMode() && (brandNew || getState().rankUpArmed);
   const deadline = new Date(Date.now() + EMERGENCY_SECONDS * 1_000);
   const built = buildQuest(playerId, {
     type,
@@ -710,7 +728,7 @@ export async function emergencyQuest(playerId: string, type: QuestType = 'pushup
     deadline,
     kind: 'emergency',
   });
-  const xp = isDemoMode() && brandNew ? Math.max(built.xp, spreadProofToNextRank(proofOf(player))) : built.xp;
+  const xp = guaranteed ? Math.max(built.xp, spreadProofToNextRank(proofOf(player))) : built.xp;
   const quest = launch(storeQuest({ ...built, xp }));
   void sendAll(['BUZZ:alarm', segNumber(EMERGENCY_SECONDS)]);
   notify({ title: '[URGENT VOW]', message: quest.title, priority: 'urgent', tags: ['rotating_light'] });

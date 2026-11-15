@@ -1,9 +1,10 @@
 /**
- * POST /api/demo/reset — removes ONLY test/demo players (ids `demo-…` / `test-…`, see lib/demo.ts)
- * and their events, from memory and Tiger Data. Requires `Authorization: Bearer <CRON_SECRET>`.
+ * POST /api/demo/reset — removes ONLY test/demo players (ids `demo-…` / `test-…`, see lib/demo.ts) with their
+ * vows, sessions, wallets, baselines, Calibrations, nights and events, from memory and Tiger Data, and re-arms
+ * DEMO_MODE's guaranteed rank-up for the next urgent vow. Requires `Authorization: Bearer <CRON_SECRET>`.
  * Called by `npm run demo:reset`.
  */
-import { purgePlayers } from '../../../../engine/quests';
+import { resetDemoState } from '../../../../engine/demoReset';
 import { ok } from '../../../../lib/api-response';
 import { deleteDemoPlayers } from '../../../../lib/db';
 import { isDemoPlayerId } from '../../../../lib/demo';
@@ -14,7 +15,7 @@ export async function POST(request: Request): Promise<Response> {
   const denied = requireCronSecret(request);
   if (denied) return denied;
   try {
-    const memoryPlayers = purgePlayers(isDemoPlayerId);
+    const { memoryPlayers } = resetDemoState(isDemoPlayerId);
     const tiger = await deleteDemoPlayers();
     return ok({ memoryPlayers, tiger });
   } catch (error) {

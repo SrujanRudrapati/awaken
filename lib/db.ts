@@ -397,6 +397,10 @@ export async function deleteDemoPlayers(): Promise<DemoDeleteResult | null> {
   try {
     await client.query('BEGIN');
     const events = await client.query('DELETE FROM events WHERE player_id ~* $1', [DEMO_PLAYER_ID_PATTERN]);
+    // Shards, baselines and nights too: the next judge on a reused demo id starts clean.
+    for (const table of ['wallets', 'calibrations', 'sleep_samples']) {
+      await client.query(`DELETE FROM ${table} WHERE player_id ~* $1`, [DEMO_PLAYER_ID_PATTERN]);
+    }
     const players = await client.query('DELETE FROM players WHERE id ~* $1', [DEMO_PLAYER_ID_PATTERN]);
     await client.query('COMMIT');
     return { players: players.rowCount ?? 0, events: events.rowCount ?? 0 };

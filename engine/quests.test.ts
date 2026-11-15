@@ -25,6 +25,7 @@ import { DAILY_TEMPLATES } from './progression';
 import {
   EMERGENCY_SECONDS,
   QuestError,
+  armDemoRankUp,
   completeQuest,
   createPlayer,
   dailyDrop,
@@ -436,6 +437,26 @@ describe('quest engine', () => {
         const second = await emergencyQuest('demo-1');
 
         expect(second.xp).toBe(40);
+      });
+
+      it('DEMO_MODE=1: a reset re-arms the rank-up for the next urgent vow, until one is kept', async () => {
+        process.env.DEMO_MODE = '1';
+        await createPlayer({ name: 'Jin', id: 'demo-1' });
+        await emergencyQuest('demo-1');
+        await vi.advanceTimersByTimeAsync(EMERGENCY_SECONDS * 1_000 + 1_000); // first one missed: no longer brand new
+
+        armDemoRankUp();
+        const missed = await emergencyQuest('demo-1');
+        await vi.advanceTimersByTimeAsync(EMERGENCY_SECONDS * 1_000 + 1_000);
+        const armed = await emergencyQuest('demo-1'); // still armed after a miss
+        pushups(10).forEach((r) => routeReading(r));
+        await vi.waitFor(() => expect(getQuest(armed.id)?.status).toBe('done'));
+        const after = await emergencyQuest('demo-1');
+
+        expect(missed.xp).toBeGreaterThan(40);
+        expect(armed.xp).toBeGreaterThan(40);
+        expect(ofType('rank.up')).toHaveLength(1);
+        expect(after.xp).toBe(40); // spent once kept
       });
 
       it('normal mode keeps the balanced emergency XP', async () => {

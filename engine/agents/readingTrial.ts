@@ -97,6 +97,11 @@ export async function answerReadingTrial(playerId: string, questId: string, answ
   return { correct, passed, late, answers: trial.questions.map((q) => q.answerIndex), completion };
 }
 
+/** Forgets issued trials for these vows (demo reset). */
+export function forgetReadingTrials(questIds: readonly string[]): void {
+  questIds.forEach((id) => trials().delete(id));
+}
+
 /** Test hook. */
 export function resetReadingTrials(): void {
   globalForTrials.__awakenReadingTrials = undefined;

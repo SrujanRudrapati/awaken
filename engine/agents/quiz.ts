@@ -112,6 +112,11 @@ export async function answerQuiz(playerId: string, questId: string, answers: rea
   return { correct, passed, answers: questions.map((q) => q.answerIndex), completion };
 }
 
+/** Forgets issued questions for these vows (demo reset). */
+export function forgetQuizzes(questIds: readonly string[]): void {
+  questIds.forEach((id) => state().quizzes.delete(id));
+}
+
 /** Test hook. */
 export function resetQuizzes(): void {
   globalForQuiz.__awakenQuiz = undefined;

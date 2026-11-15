@@ -211,7 +211,14 @@ describe('db', () => {
     });
 
     it('deletes only demo/test ids (events then players) in one transaction', async () => {
-      clientQuery.mockResolvedValueOnce({}).mockResolvedValueOnce({ rowCount: 7 }).mockResolvedValueOnce({ rowCount: 2 }).mockResolvedValueOnce({});
+      clientQuery
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ rowCount: 7 })
+        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({ rowCount: 1 })
+        .mockResolvedValueOnce({ rowCount: 9 })
+        .mockResolvedValueOnce({ rowCount: 2 })
+        .mockResolvedValueOnce({});
 
       expect(await deleteDemoPlayers()).toEqual({ players: 2, events: 7 });
 
@@ -219,6 +226,9 @@ describe('db', () => {
       expect(sql).toEqual([
         'BEGIN',
         'DELETE FROM events WHERE player_id ~* $1',
+        'DELETE FROM wallets WHERE player_id ~* $1',
+        'DELETE FROM calibrations WHERE player_id ~* $1',
+        'DELETE FROM sleep_samples WHERE player_id ~* $1',
         'DELETE FROM players WHERE id ~* $1',
         'COMMIT',
       ]);
