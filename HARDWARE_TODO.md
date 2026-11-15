@@ -123,3 +123,23 @@ that reached their target; partial totals show as progress.
   6. *Show Result* (handy while testing).
 - [ ] Run it once; allow Health access. Response `"success":true`.
 - [ ] Optional automations: Shortcuts → Automation → *When a workout ends* and *Time of day 9 PM* → run "Sync with System".
+
+---
+
+## Phase 7C — Apple Watch app → `POST /api/watch`
+
+Contract for the Watch app (Swift): header `X-Sync-Token: <SYNC_TOKEN>`, JSON
+`{"playerId":"<id>","event":"rep"|"quest.complete","exercise":"pushup"|"squat"|"jumpingjack"|"situp"|"punch","count":<n>}`.
+**`count` is cumulative for the current quest** (1, 2, 3 … — not always 1). The server adds only the increase, so a
+lost or retried post fixes itself. 409 = the player's active quest is a different exercise (or none) → show it on the Watch.
+Punch quests can only be counted by the Watch.
+
+- [ ] Simulate the Watch from the laptop:
+  ```bash
+  curl -X POST localhost:3000/api/quest/start -H 'content-type: application/json' -d '{"playerId":"demo-jin","type":"squat","target":15}'
+  for n in 1 2 3; do curl -s -X POST $PUBLIC_URL/api/watch -H "X-Sync-Token: $SYNC_TOKEN" \
+    -H 'content-type: application/json' -d "{\"playerId\":\"demo-jin\",\"event\":\"rep\",\"exercise\":\"squat\",\"count\":$n}"; echo; done
+  ```
+  → `progress` 1, 2, 3 and `rep` events on `/api/stream`.
+- [ ] On the real Watch: start a squat quest, do 5 squats → dashboard shows 5; haptic per rep.
+- [ ] Airplane-mode the Watch for 3 reps, reconnect, do 1 more → count catches up (no lost reps).

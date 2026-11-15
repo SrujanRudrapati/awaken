@@ -21,6 +21,9 @@ import type { Verifier, VerifierEvent } from './verifiers/types';
 type VerifierFactory = () => Verifier;
 type SourceVerifiers = Partial<Record<Source, Verifier>>;
 
+/** The Watch app counts these reps on-device and posts them to /api/watch; raw readings add nothing. */
+const watchCounted: VerifierFactory = () => ({ push: () => [] });
+
 const accel = (exercise: AccelExercise): Partial<Record<Source, VerifierFactory>> => ({
   phone: () => new AccelRepCounter(exercise),
   watch: () => new AccelRepCounter(exercise),
@@ -32,6 +35,7 @@ const VERIFIERS: Partial<Record<QuestType, Partial<Record<Source, VerifierFactor
   squat: accel('squat'),
   jumpingjack: accel('jumpingjack'),
   situp: accel('situp'),
+  punch: { watch: watchCounted },
   // jail / meditate / lightsout arrive in Phase 8
 };
 
@@ -46,6 +50,8 @@ interface ActiveEntry {
   quest: Quest;
   /** One fresh verifier per source that can verify this quest type. */
   verifiers: SourceVerifiers;
+  /** Reps the Watch has reported for this quest so far (its count is cumulative). */
+  watchReps: number;
 }
 
 interface RouterState {
@@ -96,6 +102,7 @@ export function setActiveQuest(quest: Quest): void {
   state.active.set(quest.playerId, {
     quest: { ...quest },
     verifiers: createVerifiers(quest.type),
+    watchReps: 0,
   });
   state.currentPlayerId = quest.playerId;
 }
@@ -149,4 +156,36 @@ export function routeReading(reading: Reading): void {
   for (const event of verifier.push(reading)) {
     handle(state, entry.quest.playerId, event, reading.source);
   }
+}
+
+/** Most reps one Watch report may add (guards against a runaway or corrupt count). */
+export const MAX_WATCH_REPS_PER_REPORT = 50;
+
+export type WatchRepResult =
+  | { ok: true; questId: string; applied: number; progress: number; completed: boolean }
+  | { ok: false; reason: string };
+
+/**
+ * Applies reps the Apple Watch counted on-device. `count` is the Watch's cumulative count for the
+ * player's active quest, so dropped or repeated reports self-correct: only the increase is added.
+ * The exercise must match the active quest and the Watch must be able to verify that type.
+ */
+export function applyWatchReps(playerId: string, exercise: QuestType, count: number): WatchRepResult {
+  const state = getState();
+  const entry = state.active.get(playerId);
+  if (!entry) return { ok: false, reason: 'No active sensor quest for this player' };
+  if (entry.quest.type !== exercise || !entry.verifiers.watch) {
+    return { ok: false, reason: `Active quest is ${entry.quest.type}, not ${exercise}` };
+  }
+  const { id: questId } = entry.quest;
+  const applied = Math.min(Math.max(0, count - entry.watchReps), MAX_WATCH_REPS_PER_REPORT);
+  state.active.set(playerId, { ...entry, watchReps: entry.watchReps + applied });
+  for (let i = 0; i < applied; i++) {
+    const current = state.active.get(playerId);
+    if (!current || current.quest.id !== questId) break; // reached the target
+    applyRep(state, current, 'watch');
+  }
+  const after = state.active.get(playerId);
+  const completed = after?.quest.id !== questId;
+  return { ok: true, questId, applied, progress: completed ? entry.quest.target : (after?.quest.progress ?? 0), completed };
 }

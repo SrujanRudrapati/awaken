@@ -7,6 +7,8 @@ import { subscribe } from '../lib/bus';
 import { logEvent } from '../lib/db';
 import type { Quest, Reading, StreamEvent } from '../lib/schemas';
 import {
+  MAX_WATCH_REPS_PER_REPORT,
+  applyWatchReps,
   clearActiveQuest,
   getActiveQuest,
   hasSensorVerifier,
@@ -210,5 +212,25 @@ describe('router', () => {
     expect(kinds).toEqual([
       'rep:true:phone', 'rep:true:phone', 'rep:true:phone', 'rep.rejected:false:phone',
     ]);
+  });
+
+  describe('applyWatchReps', () => {
+    it('caps one report at MAX_WATCH_REPS_PER_REPORT', () => {
+      setActiveQuest(quest({ type: 'squat', target: 500 }));
+
+      const result = applyWatchReps('p1', 'squat', 9_999);
+
+      expect(result).toMatchObject({ ok: true, applied: MAX_WATCH_REPS_PER_REPORT, progress: MAX_WATCH_REPS_PER_REPORT });
+    });
+
+    it('applies to the reporting player only', () => {
+      setActiveQuest(quest({ type: 'pushup', target: 5 }));
+      expect(applyWatchReps('p1', 'pushup', 1)).toMatchObject({ ok: true, applied: 1 });
+      expect(applyWatchReps('p2', 'pushup', 1)).toMatchObject({ ok: false });
+    });
+
+    it('punch quests are counted by the Watch only', () => {
+      expect(hasSensorVerifier('punch')).toBe(true);
+    });
   });
 });
