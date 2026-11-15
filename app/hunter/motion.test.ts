@@ -10,6 +10,19 @@ describe('phone motion helpers', () => {
     expect(ReadingSchema.safeParse(reading).success).toBe(true);
   });
 
+  it('adds rotationRate as rx/ry/rz in deg/s (beta → x, gamma → y, alpha → z)', () => {
+    const reading = toReading({ x: 0, y: -STANDARD_GRAVITY, z: 0 }, 10, { alpha: 30.04, beta: -120.26, gamma: 5 });
+
+    expect(reading).toEqual({ t: 10, source: 'phone', ax: 0, ay: -1, az: 0, rx: -120.3, ry: 5, rz: 30 });
+    expect(ReadingSchema.safeParse(reading).success).toBe(true);
+  });
+
+  it('leaves rotation out when the browser has no gyro data', () => {
+    expect(toReading({ x: 0, y: -STANDARD_GRAVITY, z: 0 }, 10, { alpha: null, beta: null, gamma: null })).toEqual({
+      t: 10, source: 'phone', ax: 0, ay: -1, az: 0,
+    });
+  });
+
   it('drops empty samples (iOS sends nulls before permission settles)', () => {
     expect(toReading(null, 1)).toBeNull();
     expect(toReading({ x: null, y: 1, z: 1 }, 1)).toBeNull();

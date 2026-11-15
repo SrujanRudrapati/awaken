@@ -5,7 +5,8 @@
  *
  *   pushup  Home Base pad: chest presses the pad once per 1.5 s, with one-sample contact
  *           bounce on every press and release (the verifier must debounce it).
- *   squat   iPhone armband (source 'phone'): ay swings −1 g → −0.2 g once per 2 s;
+ *   squat   iPhone armband (source 'phone'): one squat per 2 s — 0.4 s standing, then the
+ *           body drops 0.4 m and rises again (vertical accel on top of −1 g on ay);
  *           every 4th squat only reaches half depth.
  *   jail    Home Base IR: phone in the jail for 30 s, then removed.
  *   meditate  Button held in a quiet room; a 3 s noise burst at 20 s (breaks the 2 s grace once).
@@ -27,11 +28,13 @@ export const SAMPLE_MS = 100;
 export const PUSHUP_REP_MS = 1_500;
 const PAD_PATTERN: readonly Bit[] = [0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 0];
 
-// Squat (phone armband): ay rests at −1 g, reaches −0.2 g at the bottom of a full squat.
+// Squat (phone armband): gravity sits on ay (−1 g); the squat is vertical motion on top of it.
 export const SQUAT_REP_MS = 2_000;
+export const SQUAT_STAND_MS = 400;
 export const SQUAT_REST_G = -1;
-export const SQUAT_FULL_DEPTH_G = 0.8;
+export const SQUAT_FULL_DEPTH_M = 0.4;
 export const SQUAT_SHALLOW_EVERY = 4;
+const STANDARD_GRAVITY = 9.80665;
 
 // Phone Jail: jail=1 for 30 s, then 0.
 export const JAIL_DURATION_MS = 30_000;
@@ -62,23 +65,32 @@ function padAt(tMs: number): Bit {
   return PAD_PATTERN[index] ?? 0;
 }
 
-/** Depth (g) of squat `repNumber` (1-based): every 4th is half depth. */
+/** Depth (m) of squat `repNumber` (1-based): every 4th is half depth. */
 export function squatDepth(repNumber: number): number {
-  const full = SQUAT_FULL_DEPTH_G;
+  const full = SQUAT_FULL_DEPTH_M;
   return repNumber % SQUAT_SHALLOW_EVERY === 0 ? full / 2 : full;
 }
 
-function squatReading(tMs: number): Reading {
+/** Vertical acceleration (m/s², + = up) at `tMs`: hips follow −depth·(1 − cos)/2 after standing. */
+export function squatVerticalAccel(tMs: number): number {
   const repNumber = Math.floor(tMs / SQUAT_REP_MS) + 1;
-  const phase = (tMs % SQUAT_REP_MS) / SQUAT_REP_MS; // 0 standing → 0.5 bottom → 1 standing
-  const offset = (squatDepth(repNumber) * (1 - Math.cos(2 * Math.PI * phase))) / 2;
-  const ay = SQUAT_REST_G + offset;
+  const moveMs = tMs % SQUAT_REP_MS - SQUAT_STAND_MS;
+  if (moveMs < 0) return 0;
+  const w = (2 * Math.PI) / ((SQUAT_REP_MS - SQUAT_STAND_MS) / 1000);
+  return -(squatDepth(repNumber) / 2) * w * w * Math.cos((w * moveMs) / 1000);
+}
+
+function squatReading(tMs: number): Reading {
+  const ay = SQUAT_REST_G * (1 + squatVerticalAccel(tMs) / STANDARD_GRAVITY);
   return {
     t: tMs,
     source: 'phone',
-    ax: round(0.05 * Math.sin(tMs / 300)), // small sway
-    ay: round(ay),
-    az: round(Math.sqrt(Math.max(0, 1 - ay * ay))), // gravity moves onto z as the arm tilts
+    ax: round(0.02 * Math.sin(tMs / 300), 3), // small sway
+    ay: round(ay, 3),
+    az: 0,
+    rx: 0,
+    ry: 0,
+    rz: round(10 * Math.sin(tMs / 300)), // the arm turns a little (deg/s)
   };
 }
 
@@ -124,7 +136,7 @@ function eventBetween(mode: Mode, prevT: number, t: number): string | null {
   if (mode === 'squat') {
     const done = Math.floor(t / SQUAT_REP_MS);
     if (done === Math.floor(prevT / SQUAT_REP_MS)) return null;
-    const shallow = squatDepth(done) < SQUAT_FULL_DEPTH_G;
+    const shallow = squatDepth(done) < SQUAT_FULL_DEPTH_M;
     return `phone squat #${done} sent — ${shallow ? 'SHALLOW' : 'full'}${done <= 2 ? ' (calibration)' : ''}`;
   }
   if (mode === 'meditate' && prevT < MEDITATE_NOISE_MS[0] && t >= MEDITATE_NOISE_MS[0]) return 'noise burst (3 s)';

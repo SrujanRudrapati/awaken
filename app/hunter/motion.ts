@@ -18,16 +18,31 @@ export interface MotionSample {
   z: number | null;
 }
 
-/** accelerationIncludingGravity (m/s²) → a phone Reading in g. Null when the sample is empty. */
-export function toReading(accel: MotionSample | null, tMs: number): Reading | null {
+/** DeviceMotion rotationRate, deg/s: alpha around z, beta around x, gamma around y. */
+export interface RotationSample {
+  alpha: number | null;
+  beta: number | null;
+  gamma: number | null;
+}
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/**
+ * accelerationIncludingGravity (m/s²) → a phone Reading in g, plus rotationRate (deg/s) as
+ * rx/ry/rz when the browser provides it (the verifier rejects reps where the phone tumbles).
+ * Null when the accel sample is empty.
+ */
+export function toReading(accel: MotionSample | null, tMs: number, rotation?: RotationSample | null): Reading | null {
   if (!accel || accel.x === null || accel.y === null || accel.z === null) return null;
-  return {
+  const reading: Reading = {
     t: Math.max(0, Math.round(tMs)),
     source: 'phone',
     ax: round3(accel.x / STANDARD_GRAVITY),
     ay: round3(accel.y / STANDARD_GRAVITY),
     az: round3(accel.z / STANDARD_GRAVITY),
   };
+  if (!rotation || rotation.alpha === null || rotation.beta === null || rotation.gamma === null) return reading;
+  return { ...reading, rx: round1(rotation.beta), ry: round1(rotation.gamma), rz: round1(rotation.alpha) };
 }
 
 /** True if enough time passed since the last kept sample (devicemotion fires at ~60 Hz). */

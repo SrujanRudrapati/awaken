@@ -73,7 +73,7 @@ function dropNulls(value: unknown): unknown {
 /**
  * One sample from any source. Every sensor field is optional — the Home Base sends
  * pad/btn/light/snd/accel (+ jail when the IR sensor is fitted), the phone and Watch send
- * only accel. `null` (absent hardware) is the same as missing. Not strict: extra fields
+ * accel (+ rotation rate rx/ry/rz when they have a gyro). `null` (absent hardware) is the same as missing. Not strict: extra fields
  * (e.g. `servo`) are stripped, not rejected. `source` defaults to 'homebase' so raw
  * firmware JSON is accepted as-is.
  */
@@ -86,6 +86,9 @@ export const ReadingSchema = z.preprocess(
     ax: z.number().optional(), // g (MMA7660FC on I2C 0x4C, or phone/Watch)
     ay: z.number().optional(),
     az: z.number().optional(),
+    rx: z.number().optional(), // deg/s rotation rate around x/y/z (phone/Watch gyro; DeviceMotion rotationRate beta/gamma/alpha)
+    ry: z.number().optional(),
+    rz: z.number().optional(),
     jail: BitSchema.optional(), // optional IR reflective (D7): phone present in the jail
     btn: BitSchema.optional(), // button (D2)
     light: AnalogSchema.optional(), // A0

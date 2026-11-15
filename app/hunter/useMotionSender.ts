@@ -81,7 +81,7 @@ export function useMotionSender(sessionId: string | undefined): { status: Motion
     const onMotion = (event: DeviceMotionEvent): void => {
       const now = performance.now();
       if (!shouldKeep(lastKept.current, now)) return;
-      const reading = toReading(event.accelerationIncludingGravity, now);
+      const reading = toReading(event.accelerationIncludingGravity, now, event.rotationRate);
       if (!reading) return;
       lastKept.current = now;
       queue.current = [...queue.current, reading];

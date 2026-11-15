@@ -106,10 +106,10 @@ Maritime agent (cron): midnight quest drop + Penalty Zone check + nightly Gate s
 **NO Claude Fable model at runtime.**
 
 ### Readings protocol (all sources → `POST /api/readings`, `ReadingSchema`)
-`{"t":ms,"source":"homebase"|"phone"|"watch","pad"?:0|1,"ax"?:g,"ay"?:g,"az"?:g,"jail"?:0|1,"btn"?:0|1,"light"?:0-1023,"snd"?:0-1023}`
+`{"t":ms,"source":"homebase"|"phone"|"watch","pad"?:0|1,"ax"?:g,"ay"?:g,"az"?:g,"rx"?:deg/s,"ry"?:deg/s,"rz"?:deg/s,"jail"?:0|1,"btn"?:0|1,"light"?:0-1023,"snd"?:0-1023}`
 - Every sensor field is optional; unknown fields are stripped. `source` defaults to `homebase`.
 - Home Base = Arduino UNO R4 WiFi + Grove shield (every 100 ms over serial, 115200): pad (micro switch D6), btn (D2), light (A0), snd (A1, 100 ms peak), accel (MMA7660FC, I2C 0x4C); optional jail (IR reflective D7) and servo (D5) report `null` when absent. Without IR, Phone Jail uses the light sensor covered by the phone (only while a jail vow is active). Firmware: `firmware/homebase`.
-- Phone / Watch: accelerationIncludingGravity in g (~30 Hz, batched).
+- Phone / Watch: accelerationIncludingGravity in g (~30 Hz, batched), plus rotationRate in deg/s as `rx`/`ry`/`rz` when available (DeviceMotion beta/gamma/alpha). Added 2026-11-15.
 
 Laptop → Home Base (one per line, `DeviceCommandSchema`): `SEG:<4 chars>`, `LOCK`, `UNLOCK`, `BUZZ:<chime|alarm|tick>`, `CFG:IR:0|1`, `CFG:SERVO:0|1`; each acked `{"ack":cmd,"ok":bool}`. Servo lock D5, buzzer D4, 4-char alphanumeric display (HT16K33, I2C 0x71).
 
@@ -121,7 +121,7 @@ Added 2026-11-14: `sleep.summary` (`{playerId, summary: NightSummary, line, iris
 
 ### Verifiers (code, not AI — must be reliable)
 - **Push-up (pad):** Home Base pad 0→1→0 = rep (counted on release). 80 ms debounce, ≥ 0.6 s between reps ("too fast"), pad held > 3 s ignored (resting).
-- **Squat / jumping jack / sit-up / arm push-up (phone or Watch):** generic accel counter. First 2 slow reps calibrate the dominant axis and full depth (and count); then a rep = reach ≥ 70 % depth and return. ≥ 0.7 s per rep; partial motion → `rep.rejected` "not deep enough".
+- **Squat / jumping jack / sit-up / arm push-up (phone or Watch):** vertical-motion counter (`engine/verifiers/accelReps.ts`, revised 2026-11-15). Gravity = mean of the accel over each still moment (held while moving); only acceleration **along gravity** is integrated (band-passed) into a displacement proxy. A rep = one full top→bottom→top cycle in the exercise's starting direction; its depth is the mean of the way down and the way up. First 2 valid cycles calibrate the depth (and count). Rejected with `rep.rejected` + reason, checked in order: rotationRate peak > 240 °/s → "phone tumbling" (skipped without gyro data); dominant vertical-accel frequency > 2.5 Hz → "shaking"; cycle < 0.8 s → "too fast", > 4 s (or > 2 s on the way down) → "too slow"; depth < 70 % of calibrated → "not deep enough". Coming to rest in a new orientation, or an impossible integrated speed, discards a rep in progress.
 - Router picks the verifier by quest type × reading source; reps from every source add to one progress count.
 - **Phone Jail:** IR sees the phone continuously for the quest duration; servo LOCK; removing early = quest failed.
 - **Meditation:** button held + sound below quiet baseline for duration (short grace gaps).

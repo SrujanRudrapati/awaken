@@ -66,7 +66,7 @@ export function QuestPanel({ quest, isFocused, rejection, isBusy, onFocus, onSta
       <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
         <motion.div className="h-full origin-left bg-[#38BDF8]" initial={false} animate={{ scaleX: pct / 100 }} style={{ width: '100%' }} />
       </div>
-      <p className="mt-2 text-right font-mono text-sm text-[#FBBF24]">+{quest.xp} XP</p>
+      <p className="mt-2 text-right font-mono text-sm text-[#FBBF24]">+{quest.xp} Proof</p>
 
       <p className="mt-3 min-h-7 text-center font-mono text-lg text-[#EF4444]" aria-live="assertive">
         {rejection ? `✕ ${rejection.toUpperCase()}` : ''}
