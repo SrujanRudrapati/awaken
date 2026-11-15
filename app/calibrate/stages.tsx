@@ -141,7 +141,11 @@ export function FocusStage({ trials, durationMs, onDone }: FocusStageProps) {
   return (
     <section className="cal-stage" aria-label="Focus">
       <div className="sheet-top mono"><span className="accent">Focus · tap the shard, never the cross</span></div>
-      <button type="button" className="cal-pad glass" data-kind={current?.kind} data-tapped={isTapped || undefined} onPointerDown={handleTap} aria-label="Tap when the shard appears">
+      <button type="button" className="cal-pad glass" data-kind={current?.kind} data-tapped={isTapped || undefined} onPointerDown={handleTap}
+        onClick={(event) => {
+          if (event.detail === 0) handleTap(); // keyboard / assistive activation has no pointerdown
+        }}
+        aria-label="Tap when the shard appears">
         <span aria-hidden="true">{current ? (current.kind === 'go' ? '◇' : '✕') : '·'}</span>
       </button>
       <div className="track cal-progress"><i style={{ transform: `scaleX(${progress})` }} /></div>

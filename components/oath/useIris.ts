@@ -12,6 +12,7 @@ import { isForPerson } from './events';
 
 const MOOD_HOLD_MS = 8_000;
 const SPEAK_MS = 2_600;
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
 export interface IrisState {
   mood: IrisMood;
@@ -30,9 +31,13 @@ export function useIris(personId: string | null, onEvent?: (event: StreamEvent) 
   const handle = useCallback(
     (event: StreamEvent) => {
       if (!isForPerson(event, personId)) return;
-      setEventMood(moodFor(event)); // same value the server sends as event.irisMood
-      if (moodTimer.current) clearTimeout(moodTimer.current);
-      moodTimer.current = setTimeout(() => setEventMood(null), MOOD_HOLD_MS);
+      const mood = moodFor(event); // same value the server sends as event.irisMood
+      if (mood !== 'watching' || event.type === 'voice') {
+        // ordinary events (rep, quest.update…) must not calm a furious or proud Iris
+        setEventMood(mood);
+        if (moodTimer.current) clearTimeout(moodTimer.current);
+        moodTimer.current = setTimeout(() => setEventMood(null), MOOD_HOLD_MS);
+      }
       if (event.type === 'voice') {
         setCaption(event.text);
         setIsSpeaking(true);
@@ -45,6 +50,22 @@ export function useIris(personId: string | null, onEvent?: (event: StreamEvent) 
     [personId, onEvent],
   );
   const isConnected = useSystemStream(handle);
+
+  // Browsers keep audio and speech locked until a tap: prime both on the first one, on any screen.
+  useEffect(() => {
+    const prime = (): void => {
+      try {
+        const silent = new Audio(SILENT_WAV);
+        silent.volume = 0;
+        void silent.play().catch(() => undefined);
+        if ('speechSynthesis' in window) window.speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+      } catch {
+        // no audio on this device: captions still show
+      }
+    };
+    window.addEventListener('pointerdown', prime, { once: true });
+    return () => window.removeEventListener('pointerdown', prime);
+  }, []);
 
   useEffect(
     () => () => {

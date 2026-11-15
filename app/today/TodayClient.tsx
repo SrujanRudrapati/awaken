@@ -70,6 +70,7 @@ export function TodayClient() {
       switch (event.type) {
         case 'rep':
           setQuests((qs) => qs.map((q) => (q.id === event.questId ? { ...q, progress: event.count } : q)));
+          setNotes((current) => (current[event.questId] ? { ...current, [event.questId]: '' } : current));
           return;
         case 'rep.rejected':
           setNotes((current) => ({ ...current, [event.questId]: `✕ Not counted — ${event.reason}` }));

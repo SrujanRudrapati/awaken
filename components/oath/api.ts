@@ -73,9 +73,6 @@ export async function swear(name: string): Promise<z.infer<typeof PlayerSchema>>
 
 const BoardRowSchema = z.object({ id: z.string(), name: z.string(), rank: RankSchema, level: z.number().optional(), power: z.number(), weeklyProof: z.number() });
 export type BoardRow = z.infer<typeof BoardRowSchema>;
-const LeaderboardSchema = z.object({ week: z.string(), players: z.array(BoardRowSchema) });
-export const fetchLeaderboard = (): Promise<z.infer<typeof LeaderboardSchema>> => oathCall('/api/leaderboard?includeDemo=1', LeaderboardSchema);
-
 const ConstellationSchema = z.object({ name: z.string(), size: z.number(), position: z.number(), members: z.array(BoardRowSchema) });
 export type Constellation = z.infer<typeof ConstellationSchema>;
 export const fetchConstellation = (personId: string): Promise<Constellation> => oathCall(`/api/constellation/${id(personId)}`, ConstellationSchema);

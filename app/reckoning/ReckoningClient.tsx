@@ -36,7 +36,7 @@ export function ReckoningClient() {
   const [isBusy, setIsBusy] = useState(false);
   const [now, setNow] = useState<number | null>(null);
   const [isWide, setIsWide] = useState(false);
-  const [trial, setTrial] = useState<Trial | null>(null);
+  const [openTrial, setOpenTrial] = useState<{ vowId: string; isReading: boolean; title: string; trial: Trial } | null>(null);
   const owed = reckoningVow(quests);
   const isInReckoning = Boolean(person?.penalty) || owed !== null;
 
@@ -130,12 +130,14 @@ export function ReckoningClient() {
   const handleTrial = (): Promise<void> =>
     run(async () => {
       if (!personId || !owed) return;
-      setTrial(owed.type === 'read' ? await fetchReadTrial(personId, owed.id) : await fetchQuizTrial(personId, owed.id, owed.topic ?? plainTitle(owed.title)));
+      const isReading = owed.type === 'read';
+      const trial = isReading ? await fetchReadTrial(personId, owed.id) : await fetchQuizTrial(personId, owed.id, owed.topic ?? plainTitle(owed.title));
+      setOpenTrial({ vowId: owed.id, isReading, title: plainTitle(owed.title), trial });
     });
 
   const submitTrial = async (answers: number[]): Promise<TrialResult> => {
-    if (!personId || !owed) throw new Error('No trial is open');
-    const result = owed.type === 'read' ? await answerReadTrial(personId, owed.id, answers) : await answerQuizTrial(personId, owed.id, answers);
+    if (!personId || !openTrial) throw new Error('No trial is open');
+    const result = openTrial.isReading ? await answerReadTrial(personId, openTrial.vowId, answers) : await answerQuizTrial(personId, openTrial.vowId, answers);
     void refresh();
     return result;
   };
@@ -223,7 +225,7 @@ export function ReckoningClient() {
             </section>
           </div>
         )}
-        {trial && owed && <TrialSheet title={plainTitle(owed.title)} trial={trial} onSubmit={submitTrial} onClose={() => setTrial(null)} />}
+        {openTrial && <TrialSheet title={openTrial.title} trial={openTrial.trial} onSubmit={submitTrial} onClose={() => setOpenTrial(null)} />}
         <Announcement message={announcement} onDismiss={() => setAnnouncement(null)} />
       </OathShell>
     </MotionConfig>

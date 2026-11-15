@@ -1,6 +1,6 @@
 'use client';
 /** A trial from Iris: questions one at a time, graded by the server. Used by focus trials and reading vows. */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Trial, TrialResult } from '../../components/oath/api';
 
 interface TrialSheetProps {
@@ -15,7 +15,18 @@ export function TrialSheet({ title, trial, onSubmit, onClose }: TrialSheetProps)
   const [result, setResult] = useState<TrialResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const total = trial.questions.length;
+
+  useEffect(() => {
+    cardRef.current?.focus();
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const question = trial.questions[Math.min(answers.length, total - 1)];
 
   const handleAnswer = async (index: number): Promise<void> => {
@@ -37,7 +48,7 @@ export function TrialSheet({ title, trial, onSubmit, onClose }: TrialSheetProps)
 
   return (
     <div className="sheet" role="dialog" aria-modal="true" aria-label={`Trial: ${title}`} data-tone={result ? (result.passed ? 'gold' : 'red') : undefined}>
-      <div className="sheet-card glass">
+      <div ref={cardRef} tabIndex={-1} className="sheet-card glass">
         <div className="sheet-top mono">
           <span className="accent">Trial · {title}</span>
           <span className="mute">{result ? 'Judged' : `${Math.min(answers.length + 1, total)} / ${total}`}</span>

@@ -190,7 +190,13 @@ export function IrisCanvas({ mood, isSpeaking = false, onUnavailable }: IrisCanv
     const sparkData = new Float32Array(SPARK_COUNT * 3);
     const sparkBuffer = gl.createBuffer();
 
-    const uniform = (program: WebGLProgram, name: string) => gl.getUniformLocation(program, name);
+    const locations = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
+    const uniform = (program: WebGLProgram, name: string): WebGLUniformLocation | null => {
+      const cache = locations.get(program) ?? new Map<string, WebGLUniformLocation | null>();
+      locations.set(program, cache);
+      if (!cache.has(name)) cache.set(name, gl.getUniformLocation(program, name));
+      return cache.get(name) ?? null;
+    };
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);

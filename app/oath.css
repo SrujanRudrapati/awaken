@@ -551,3 +551,12 @@ body {
   color: var(--mute);
 }
 
+
+/* labels that wrap a hidden file input still show keyboard focus */
+.btn:focus-within {
+  outline: 1px solid var(--a);
+  outline-offset: 3px;
+}
+.sheet-card:focus {
+  outline: none;
+}

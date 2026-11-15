@@ -5,6 +5,7 @@ export function rememberedId(): string | null {
   if (typeof window === 'undefined') return null;
   const fromUrl = new URLSearchParams(window.location.search).get('player');
   try {
+    if (fromUrl) window.localStorage.setItem(STORAGE_KEY, fromUrl); // links between screens carry no query
     return fromUrl ?? window.localStorage.getItem(STORAGE_KEY);
   } catch {
     return fromUrl;

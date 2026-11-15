@@ -11,8 +11,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Announcement, type AnnouncementMessage } from '../../components/oath/Announcement';
 import { IrisGlyph } from '../../components/oath/IrisGlyph';
 import { announcementFor } from '../../components/oath/events';
-import { rememberId, rememberedId } from '../../components/oath/identity';
+import { forgetId, rememberId, rememberedId } from '../../components/oath/identity';
 import { useIris } from '../../components/oath/useIris';
+import { UNKNOWN_PERSON } from '../../components/oath/usePerson';
 import type { Player, Quest, StreamEvent } from '../../lib/schemas';
 import { createPlayer, fetchPlayerQuests, pickPhoneQuest, startQuest, upsertQuest, type PhoneQuestType } from '../hunter/api';
 import { formatRepDebug, isDebugSearch, phoneExercise } from '../hunter/repDebug';
@@ -88,7 +89,14 @@ export function BandClient() {
         setError(null);
       })
       .catch((e: unknown) => {
-        if (isCurrent) setError(e instanceof Error ? e.message : UNREACHABLE);
+        if (!isCurrent) return;
+        const message = e instanceof Error ? e.message : UNREACHABLE;
+        if (UNKNOWN_PERSON.test(message)) {
+          forgetId(); // the remembered person is gone (demo reset): show the oath form again
+          setPersonId(null);
+          return;
+        }
+        setError(message);
       });
     return () => {
       isCurrent = false;

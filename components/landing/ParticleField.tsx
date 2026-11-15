@@ -189,7 +189,13 @@ export function ParticleField({ getProgress, isIntroDone, onUnavailable }: Parti
     window.addEventListener('pointermove', onPointerMove, { passive: true });
     document.addEventListener('pointerleave', onPointerLeave);
 
-    const uniform = (program: WebGLProgram, name: string) => gl.getUniformLocation(program, name);
+    const locations = new Map<WebGLProgram, Map<string, WebGLUniformLocation | null>>();
+    const uniform = (program: WebGLProgram, name: string): WebGLUniformLocation | null => {
+      const cache = locations.get(program) ?? new Map<string, WebGLUniformLocation | null>();
+      locations.set(program, cache);
+      if (!cache.has(name)) cache.set(name, gl.getUniformLocation(program, name));
+      return cache.get(name) ?? null;
+    };
     const state = { x: 2.6, y: 0, scale: 1, color: hexToRgb(SECTION_LOOKS[0].color), glitch: 0, intro: isReduced ? 1 : 0, camX: 0, camY: 0, spin: 0 };
 
     const frame = (dt: number, elapsed: number): void => {

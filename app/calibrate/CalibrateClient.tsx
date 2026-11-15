@@ -82,7 +82,7 @@ export function CalibrateClient() {
     });
 
   const handleBegin = (stage: CalibrationStage): Promise<void> => {
-    if ((stage === 'body' || stage === 'vitality') && motionSender.status === 'idle') void motionSender.start(); // inside the tap: iOS motion permission
+    if ((stage === 'body' || stage === 'vitality') && motionSender.status !== 'streaming' && motionSender.status !== 'requesting') void motionSender.start(); // inside the tap: iOS motion permission
     return run(async () => {
       if (!personId) return;
       if (stage === 'body' || stage === 'vitality') {
@@ -104,9 +104,10 @@ export function CalibrateClient() {
   const handleRepFinish = (stage: 'body' | 'vitality'): Promise<void> =>
     run(async () => {
       if (!personId) return;
-      setRunning(null);
+      const res = await submitCalibration(personId, { stage, action: 'finish' }, StagePayload.score);
       motionSender.stop();
-      setSession((await submitCalibration(personId, { stage, action: 'finish' }, StagePayload.score)).session);
+      setRunning(null);
+      setSession(res.session);
     });
 
   const handleMindAnswer = (answerIndex: number): Promise<void> =>
@@ -121,12 +122,20 @@ export function CalibrateClient() {
   const handleFocusDone = (responses: { i: number; rtMs: number | null }[]): Promise<void> =>
     run(async () => {
       if (!personId) return;
-      setRunning(null);
-      setSession((await submitCalibration(personId, { stage: 'focus', action: 'submit', responses }, StagePayload.focusResult)).session);
+      try {
+        setSession((await submitCalibration(personId, { stage: 'focus', action: 'submit', responses }, StagePayload.focusResult)).session);
+      } finally {
+        setRunning(null); // the test cannot be replayed in place; the hub offers it again if the submit failed
+      }
     });
 
   const bodyUnit = VARIANTS.find((v) => v.id === (session?.bodyVariant ?? variant))?.unit ?? 'reps';
-  const sensorNote = motionSender.status === 'streaming' ? 'This phone is counting. The pad and Watch count too.' : 'Counted by the rep pad, the band or the Watch — never by hand.';
+  const sensorNote =
+    motionSender.status === 'streaming'
+      ? 'This phone is counting. The pad and Watch count too.'
+      : motionSender.status === 'denied'
+        ? 'Motion access denied on this phone — Settings › Safari › Motion & Orientation. The pad and Watch still count.'
+        : 'Counted by the rep pad, the band or the Watch — never by hand.';
   const idleLine = result ? `Rank ${result.rank}. …Acceptable.` : session ? 'Four tests. Any order. I am watching all of them.' : 'Your name first. Then we see what you are.';
 
   return (

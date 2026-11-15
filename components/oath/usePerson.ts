@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchPlayerQuests } from '../../app/hunter/api';
 import type { Player, Quest } from '../../lib/schemas';
-import { rememberId, rememberedId } from './identity';
+import { forgetId, rememberId, rememberedId } from './identity';
+
+/** The server's wording when an id no longer exists (e.g. after a demo reset). */
+export const UNKNOWN_PERSON = /^No one found/i;
 
 const UNREACHABLE = 'Could not reach Iris';
 
@@ -43,7 +46,14 @@ export function usePerson(): PersonState {
         setError(null);
       })
       .catch((e: unknown) => {
-        if (isCurrent) setError(e instanceof Error ? e.message : UNREACHABLE);
+        if (!isCurrent) return;
+        const message = e instanceof Error ? e.message : UNREACHABLE;
+        if (UNKNOWN_PERSON.test(message)) {
+          forgetId(); // the remembered person is gone: back to the oath, not a dead end
+          setPersonId(null);
+          return;
+        }
+        setError(message);
       });
     return () => {
       isCurrent = false;
