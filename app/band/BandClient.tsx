@@ -2,6 +2,7 @@
 /**
  * /band — the phone on the arm. "Begin" grants motion access and streams the accelerometer (tagged with the
  * vow's sessionId); the live stream drives the counter, the "not counted" flash and Iris's announcements.
+ * The screen stays awake while a vow is active; Pocket mode blacks it out; `?debug=1` shows the rep tuning line.
  * Person: `?player=<id>` or the one remembered on this phone, else the oath form.
  */
 import { MotionConfig } from 'framer-motion';
@@ -9,13 +10,19 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { Announcement, type AnnouncementMessage } from '../../components/oath/Announcement';
 import { IrisGlyph } from '../../components/oath/IrisGlyph';
+import { announcementFor } from '../../components/oath/events';
 import { rememberId, rememberedId } from '../../components/oath/identity';
 import { useIris } from '../../components/oath/useIris';
 import type { Player, Quest, StreamEvent } from '../../lib/schemas';
 import { createPlayer, fetchPlayerQuests, pickPhoneQuest, startQuest, upsertQuest, type PhoneQuestType } from '../hunter/api';
+import { formatRepDebug, isDebugSearch, phoneExercise } from '../hunter/repDebug';
+import { nextSensorPaused, type SensorPauseEvent } from '../hunter/screenGuard';
 import { useMotionSender } from '../hunter/useMotionSender';
+import { useRepDebug } from '../hunter/useRepDebug';
+import { useWakeLock } from '../hunter/useWakeLock';
 import './band.css';
 import { SENSOR_STATUS, VOW_CARDS } from './labels';
+import { PocketScreen } from './PocketScreen';
 import { VowRing } from './VowRing';
 
 const REJECTION_MS = 1_500;
@@ -31,12 +38,32 @@ export function BandClient() {
   const [announcement, setAnnouncement] = useState<AnnouncementMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [isDebug, setIsDebug] = useState(false);
+  const [lastRejection, setLastRejection] = useState<string | null>(null);
+  const [isPocket, setIsPocket] = useState(false);
+  const [isSensorPaused, setIsSensorPaused] = useState(false);
   const quest = pickPhoneQuest(quests);
-  const motionSender = useMotionSender(quest?.sessionId);
+  const debugExercise = phoneExercise(quest?.type);
+  const repDebug = useRepDebug(debugExercise, isDebug);
+  const motionSender = useMotionSender(quest?.sessionId, isDebug ? repDebug.onReading : undefined);
+  const isStreaming = motionSender.status === 'streaming' || motionSender.status === 'offline';
+  const isVowActive = quest !== null;
+  const pause = useCallback((event: SensorPauseEvent) => setIsSensorPaused((paused) => nextSensorPaused(paused, event)), []);
+  const exitPocket = useCallback(() => setIsPocket(false), []);
+  useWakeLock(isVowActive || isStreaming);
+
+  useEffect(() => {
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'hidden') pause({ type: 'hidden', vowActive: isVowActive, streaming: isStreaming });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [pause, isVowActive, isStreaming]);
 
   useEffect(() => {
     setPersonId(rememberedId()); // eslint-disable-line react-hooks/set-state-in-effect -- reads browser-only state after hydration
     setIsReady(true);
+    setIsDebug(isDebugSearch(window.location.search));
   }, []);
 
   const refresh = useCallback(async (id: string) => {
@@ -79,35 +106,28 @@ export function BandClient() {
       if (!personId) return;
       switch (event.type) {
         case 'rep':
+          pause({ type: 'rep' });
           setFocusedQuestId(event.questId);
           setQuests((qs) => qs.map((q) => (q.id === event.questId ? { ...q, progress: event.count } : q)));
           return;
         case 'rep.rejected':
           setRejection(event.reason);
+          setLastRejection(event.reason);
           return;
         case 'quest.update':
           setQuests((qs) => upsertQuest(qs, event.quest));
           return;
         case 'quest.complete':
           setQuests((qs) => upsertQuest(qs, event.quest));
-          setAnnouncement({ id: Date.now(), tone: 'blue', header: 'Vow kept', title: event.quest.title, detail: `+${event.xpGained} Proof` });
-          void refresh(personId);
-          return;
-        case 'levelup':
-          setAnnouncement({ id: Date.now(), tone: 'gold', header: 'Ascension', title: `Level ${event.level}`, detail: `Rank ${event.toRank}` });
-          void refresh(personId);
-          return;
-        case 'rank.up':
-          setAnnouncement({ id: Date.now(), tone: 'gold', header: 'Ascension', title: `Rank ${event.toRank}`, detail: `From ${event.fromRank}. Proven.` });
-          void refresh(personId);
-          return;
-        case 'penalty':
-          setAnnouncement({ id: Date.now(), tone: 'red', header: 'The Reckoning', title: 'Vow broken', detail: event.reason });
-          void refresh(personId);
-          return;
+          setIsPocket(false); // show the moment
+          break;
       }
+      const moment = announcementFor(event);
+      if (!moment) return;
+      setAnnouncement({ id: Date.now(), ...moment });
+      void refresh(personId);
     },
-    [personId, refresh],
+    [personId, refresh, pause],
   );
   const iris = useIris(personId, handleEvent, person?.penalty ? 'furious' : 'watching');
 
@@ -147,7 +167,6 @@ export function BandClient() {
       setQuests((qs) => upsertQuest(qs, started));
     });
 
-  const isStreaming = motionSender.status === 'streaming' || motionSender.status === 'offline';
   const isFocused = quest !== null && quest.id === focusedQuestId;
   const mood = rejection ? 'unimpressed' : iris.mood;
   const idleLine = isStreaming ? 'Go on. I am counting.' : 'Press Begin. I count only what I can feel.';
@@ -213,7 +232,17 @@ export function BandClient() {
               <p className={`mono band-status ${motionSender.status === 'streaming' ? 'accent' : 'mute'}`}>
                 {SENSOR_STATUS[motionSender.status]}{isStreaming ? ` · ${motionSender.sent} samples` : ''}
               </p>
+              {isStreaming && quest && (
+                <button type="button" className="btn btn-quiet mono" onClick={() => setIsPocket(true)}>Pocket mode</button>
+              )}
             </div>
+
+            {isSensorPaused && (
+              <button type="button" role="alert" className="band-notice glass" onClick={() => pause({ type: 'dismiss' })}>
+                Sensor paused — the screen was locked. Reps while it was off were not counted. Tap to dismiss.
+              </button>
+            )}
+            {isDebug && <p data-testid="rep-debug" className="band-debug mono">{formatRepDebug({ exercise: debugExercise, snapshot: repDebug.snapshot, serverReason: lastRejection })}</p>}
 
             <section aria-label="Vows this phone can count" className="band-cards">
               {VOW_CARDS.map((card) => {
@@ -238,6 +267,7 @@ export function BandClient() {
 
         {error && <p role="alert" className="band-error glass">{error}</p>}
         <Announcement message={announcement} onDismiss={() => setAnnouncement(null)} />
+        {isPocket && quest && <PocketScreen progress={quest.progress} target={quest.target} onExit={exitPocket} />}
       </main>
     </MotionConfig>
   );

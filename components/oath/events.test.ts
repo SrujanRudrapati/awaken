@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { Quest, StreamEvent } from '../../lib/schemas';
-import { eventPersonId, isForPerson, rejectionLine } from './events';
+import { announcementFor, eventPersonId, isForPerson, rejectionLine } from './events';
 
 const quest: Quest = {
   id: 'q1', playerId: 'ada', stat: 'STR', title: 'Push-ups', type: 'pushup', target: 10, progress: 0, xp: 20,
@@ -37,5 +37,23 @@ describe('rejectionLine', () => {
 
   test('passes other reasons through in lower case without the full stop', () => {
     expect(rejectionLine('Too fast.')).toBe('Not counted — too fast');
+  });
+});
+
+describe('announcementFor', () => {
+  test('announces a kept vow with its Proof', () => {
+    expect(announcementFor({ type: 'quest.complete', quest, xpGained: 20 })).toEqual({ tone: 'blue', header: 'Vow kept', title: 'Push-ups', detail: '+20 Proof' });
+  });
+
+  test('announces a new rank letter in gold', () => {
+    expect(announcementFor({ type: 'rank.up', playerId: 'ada', fromRank: 'E', toRank: 'D', power: 31 })).toMatchObject({ tone: 'gold', title: 'Rank D' });
+  });
+
+  test('announces the Reckoning in red with the reason', () => {
+    expect(announcementFor({ type: 'penalty', playerId: 'ada', reason: 'Missed a day.' })).toMatchObject({ tone: 'red', header: 'The Reckoning', detail: 'Missed a day.' });
+  });
+
+  test('stays quiet for ordinary events', () => {
+    expect(announcementFor({ type: 'rep', playerId: 'ada', questId: 'q1', count: 1 })).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 /** Pure helpers over stream events (unit-tested). */
 import type { StreamEvent } from '../../lib/schemas';
+import type { AnnouncementTone } from './Announcement';
 
 /** The person an event is about, if any (`reading` and broadcast voice lines have none). */
 export function eventPersonId(event: StreamEvent): string | undefined {
@@ -27,4 +28,29 @@ export function rejectionLine(reason: string): string {
   if (DEPTH_REASON.test(reason)) return 'Not counted — go deeper';
   const clean = reason.trim().replace(/[.!]+$/, '');
   return clean ? `Not counted — ${clean.toLowerCase()}` : 'Not counted';
+}
+
+export interface AnnouncementCopy {
+  tone: AnnouncementTone;
+  header: string;
+  title: string;
+  detail?: string;
+}
+
+/** The full-screen moment an event deserves, if any. */
+export function announcementFor(event: StreamEvent): AnnouncementCopy | null {
+  switch (event.type) {
+    case 'quest.complete':
+      return { tone: 'blue', header: 'Vow kept', title: event.quest.title, detail: `+${event.xpGained} Proof` };
+    case 'levelup':
+      return { tone: 'gold', header: 'Ascension', title: `Level ${event.level}`, detail: `Rank ${event.toRank}` };
+    case 'rank.up':
+      return { tone: 'gold', header: 'Ascension', title: `Rank ${event.toRank}`, detail: `From ${event.fromRank}. Proven.` };
+    case 'rank.passed':
+      return { tone: 'gold', header: 'Constellation', title: `You passed ${event.passedName}`, detail: `${Math.round(event.weeklyProof)} Proof this week` };
+    case 'penalty':
+      return { tone: 'red', header: 'The Reckoning', title: 'Vow broken', detail: event.reason };
+    default:
+      return null;
+  }
 }

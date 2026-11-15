@@ -1,0 +1,288 @@
+/* /today — Iris on the left, the day's vows on the right; stacked on phones. */
+.today {
+  display: grid;
+  grid-template-columns: minmax(0, 440px) minmax(0, 640px);
+  justify-content: center;
+  gap: clamp(28px, 6vw, 96px);
+  align-items: start;
+}
+.today-iris {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.today-iris .caption {
+  width: 100%;
+}
+.today-facts {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  padding: 16px 20px;
+  gap: 12px;
+}
+.today-facts dd {
+  font-size: 24px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.today-rank {
+  color: var(--gold);
+}
+.today-vows {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+.today-vows .display {
+  font-size: clamp(46px, 6vw, 84px);
+  margin: -6px 0 4px;
+}
+.today-group ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.vow {
+  padding: 16px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vow[data-tone="red"] {
+  --a: var(--red);
+}
+.vow[data-tone="gold"] {
+  --a: var(--gold);
+}
+.vow[data-status="done"],
+.vow[data-status="failed"] {
+  opacity: 0.72;
+}
+.vow-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.vow-proof {
+  margin-left: auto;
+  color: var(--gold);
+  white-space: nowrap;
+}
+.vow-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+.vow-text {
+  min-width: 0;
+}
+.vow h3 {
+  font-size: 22px;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+.vow-text p {
+  font-size: 14px;
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+.vow-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.vow-go {
+  color: var(--ink);
+  flex: none;
+  white-space: nowrap;
+}
+.vow-note {
+  color: var(--a);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.night {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.night-hours {
+  font-size: 44px;
+  font-weight: 200;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+.night-line {
+  margin-top: 6px;
+  font-size: 16px;
+}
+
+.newvow {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.newvow-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    border-color 0.4s,
+    background 0.4s,
+    transform 0.3s var(--ease);
+}
+.chip:hover:not(:disabled),
+.chip[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--a) 60%, transparent);
+  background: color-mix(in srgb, var(--a) 9%, transparent);
+}
+.chip:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.chip:disabled {
+  opacity: 0.45;
+}
+.chip-urgent {
+  color: var(--red);
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+}
+.newvow-detail {
+  display: flex;
+  gap: 8px;
+}
+.field {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+}
+.field::placeholder {
+  color: var(--mute);
+}
+
+/* trial sheet */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--safe-t) + 18px) 18px calc(var(--safe-b) + 18px);
+  background: rgba(5, 6, 10, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  overflow-y: auto;
+}
+.sheet[data-tone="gold"] {
+  --a: var(--gold);
+}
+.sheet[data-tone="red"] {
+  --a: var(--red);
+}
+.sheet-card {
+  width: min(560px, 100%);
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+}
+.sheet-top {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+.sheet-question {
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+.sheet-title {
+  font-size: clamp(44px, 8vw, 72px);
+  font-weight: 200;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  color: var(--a);
+}
+.sheet-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.sheet-option {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+  padding: 15px 18px;
+  border-radius: 16px;
+  text-align: left;
+  font: inherit;
+  font-size: 17px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.3s var(--ease);
+}
+.sheet-option:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+@media (max-width: 859px) {
+  .today {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
+  .today-iris {
+    position: static;
+    gap: 12px;
+  }
+  .today-iris .caption {
+    font-size: 16px;
+  }
+  .today-facts dd {
+    font-size: 20px;
+  }
+  .vow-main {
+    flex-wrap: wrap;
+  }
+  .vow h3 {
+    font-size: 20px;
+  }
+  .newvow-detail {
+    flex-direction: column;
+  }
+}
