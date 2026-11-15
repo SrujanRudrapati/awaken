@@ -790,6 +790,31 @@ export async function sweepExpired(now = new Date()): Promise<number> {
  * Midnight drop for every known player: missed quests → Penalty Zone, then today's quests.
  * Skips a type the player already got a daily for today, whatever its status (safe to call twice).
  */
+function deadlineFor(type: QuestType, now: Date): Date {
+  return NIGHT_VOW_TYPES.includes(type) ? nextMorningDeadline(now) : endOfDay(now);
+}
+
+/** Today's vows for one person, skipping types already dropped today (so the cron and Calibration never duplicate). */
+async function dropFor(player: Player, now: Date, design: QuestDesigner): Promise<Quest[]> {
+  const templates = await design(player).catch(() => DAILY_TEMPLATES);
+  const droppedToday = new Set(
+    listQuests(player.id)
+      .filter((q) => q.kind === 'daily' && q.deadline === deadlineFor(q.type, now).toISOString())
+      .map((q) => q.type),
+  );
+  const quests = templates
+    .filter((t) => !droppedToday.has(t.type))
+    .map((t) => storeQuest(buildQuest(player.id, { ...t, kind: 'daily', deadline: deadlineFor(t.type, now) })));
+  quests.forEach((quest) => publish({ type: 'quest.update', quest }));
+  return quests;
+}
+
+/** Drops today's vows for one person right away (e.g. when Calibration ends), so Today is never empty. */
+export async function dropForPlayer(playerId: string, now = new Date(), design: QuestDesigner = templateDesigner): Promise<Quest[]> {
+  const player = await requirePlayer(playerId);
+  return dropFor(player, now, design);
+}
+
 export async function dailyDrop(now = new Date(), design: QuestDesigner = templateDesigner): Promise<Record<string, Quest[]>> {
   await sweepExpired(now);
   const stored = await db.listPlayers().catch(() => []);
@@ -797,20 +822,9 @@ export async function dailyDrop(now = new Date(), design: QuestDesigner = templa
     if (!getState().players.has(p.id)) getState().players.set(p.id, p);
   });
 
-  const deadlineFor = (type: QuestType): Date => (NIGHT_VOW_TYPES.includes(type) ? nextMorningDeadline(now) : endOfDay(now));
   const dropped: Record<string, Quest[]> = {};
   for (const player of getState().players.values()) {
-    const templates = await design(player).catch(() => DAILY_TEMPLATES);
-    const droppedToday = new Set(
-      listQuests(player.id)
-        .filter((q) => q.kind === 'daily' && q.deadline === deadlineFor(q.type).toISOString())
-        .map((q) => q.type),
-    );
-    const quests = templates
-      .filter((t) => !droppedToday.has(t.type))
-      .map((t) => storeQuest(buildQuest(player.id, { ...t, kind: 'daily', deadline: deadlineFor(t.type) })));
-    quests.forEach((quest) => publish({ type: 'quest.update', quest }));
-    dropped[player.id] = quests;
+    dropped[player.id] = await dropFor(player, now, design);
   }
   const titles = [...new Set(Object.values(dropped).flat().map((q) => q.title))];
   if (titles.length > 0) {

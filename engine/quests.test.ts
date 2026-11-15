@@ -28,6 +28,7 @@ import {
   completeQuest,
   createPlayer,
   dailyDrop,
+  dropForPlayer,
   emergencyQuest,
   failQuest,
   getPlayer,
@@ -476,6 +477,21 @@ describe('quest engine', () => {
 
       expect(listQuests('a').filter((q) => q.kind === 'penalty')).toHaveLength(1);
       expect(vi.mocked(sendAll).mock.calls.filter(([c]) => c.includes('BUZZ:alarm'))).toHaveLength(1);
+    });
+
+    it("dropForPlayer drops one person's vows now, once per day, without touching others", async () => {
+      await createPlayer({ name: 'A', id: 'a' });
+      await createPlayer({ name: 'B', id: 'b' });
+      const now = new Date(2026, 10, 15, 0, 30);
+
+      const first = await dropForPlayer('a', now);
+      const again = await dropForPlayer('a', now);
+      const later = await dailyDrop(new Date(2026, 10, 15, 0, 45));
+
+      expect(first.map((q) => q.type)).toEqual(DAILY_TEMPLATES.map((t) => t.type));
+      expect(again).toEqual([]);
+      expect(listQuests('b')).toHaveLength(DAILY_TEMPLATES.length); // only from the later full drop
+      expect(later.a).toEqual([]); // the cron doesn't duplicate what Calibration already dropped
     });
 
     it('drops the template quests for every player, once per day', async () => {

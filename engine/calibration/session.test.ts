@@ -25,7 +25,7 @@ import { subscribe } from '../../lib/bus';
 import * as db from '../../lib/db';
 import { geminiJson } from '../../lib/llm';
 import type { Reading, StreamEvent } from '../../lib/schemas';
-import { createPlayer, getPlayer, getQuest, resetEngine } from '../quests';
+import { createPlayer, getPlayer, getQuest, listQuests, resetEngine } from '../quests';
 import { resetRouter, routeReading } from '../router';
 import { RECALIBRATION_BONUS, SENSOR_WINDOW_MS, resetCalibration, startCalibration, submitCalibration } from './session';
 
@@ -92,6 +92,8 @@ describe('Calibration session', () => {
     expect(stageEvents.filter((e) => e.type === 'calibration.stage' && e.status === 'done').map((e) => e.type === 'calibration.stage' && e.stage)).toEqual(['body', 'vitality', 'mind', 'focus']);
     expect(events.find((e) => e.type === 'calibration.complete')).toMatchObject({ rank: 'D', recalibration: false, bonusXp: 0 });
     expect(events.some((e) => e.type === 'voice' && e.eventType === 'awakening')).toBe(true);
+    // A new person never meets an empty Today: their vows drop as Calibration ends.
+    await vi.waitFor(() => expect(listQuests('p1').filter((q) => q.kind === 'daily').length).toBeGreaterThan(0));
   });
 
   it('measurement vows give no Proof and are cancelled when the window closes', async () => {

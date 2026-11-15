@@ -1,0 +1,8 @@
+{
+  "name": "awaken-maritime-midnight",
+  "private": true,
+  "type": "module",
+  "description": "Maritime-hosted cron agent: wakes at midnight and runs Awaken's Penalty Zone sweep + daily vow drop.",
+  "scripts": { "start": "node server.ts" },
+  "engines": { "node": ">=23.6" }
+}

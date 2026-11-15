@@ -17,7 +17,9 @@ import * as db from '../../lib/db';
 import { seedProofForRank, zeroProof } from '../../lib/power';
 import type { Player, QuestType, Rank } from '../../lib/schemas';
 import { composeLine, sayLine } from '../agents/voice';
-import { QuestError, applyCalibration, cancelQuest, getPlayer, getQuest, grantProof, isDemoMode, startQuest } from '../quests';
+import { createGeminiDesigner, recallForDesigner } from '../agents/designer';
+import { DAILY_TEMPLATES, type QuestTemplate } from '../progression';
+import { QuestError, applyCalibration, cancelQuest, dropForPlayer, getPlayer, getQuest, grantProof, isDemoMode, startQuest } from '../quests';
 import { recentNights } from '../sleepSync';
 import { FOCUS_DURATION_MS, buildTrials, scoreTrials, type Trial, type TrialResponse } from './focus';
 import { MAX_MIND_QUESTIONS, MIND_DURATION_MS, adapt, generatePool, nextQuestion, publicQuestion, type Level, type MindQuestion } from './mind';
@@ -364,6 +366,7 @@ async function maybeComplete(session: Session): Promise<void> {
   );
   db.logEvent({ playerId: session.playerId, kind: 'calibration', value: result.overall, source: 'engine', detail: { rank, scores } });
   publish({ type: 'calibration.complete', playerId: session.playerId, rank, overall: result.overall, scores, recalibration: session.recalibration, bonusXp });
+  await dropTodaysVows(session.playerId, at);
 
   const moment = {
     type: 'awakening' as const,
@@ -371,6 +374,26 @@ async function maybeComplete(session: Session): Promise<void> {
     facts: `Calibration complete. Starting rank ${rank}. Body ${scores.body}, Vitality ${scores.vitality}, Mind ${scores.mind}, Focus ${scores.focus} out of 100.${session.recalibration ? ` Re-calibration bonus: ${bonusXp} Proof.` : ''}`,
   };
   await sayLine(moment, await composeLine(moment));
+}
+
+/** How long a new person's first vows may wait on the Gemini designer before the templates are used instead. */
+const FIRST_DROP_DESIGN_BUDGET_MS = 3_000;
+
+/** Today's vows the moment Calibration ends (deduped against the midnight drop), so Today is never empty. */
+async function dropTodaysVows(playerId: string, now: Date): Promise<void> {
+  const gemini = createGeminiDesigner({ context: recallForDesigner });
+  const design = (player: Player): Promise<readonly QuestTemplate[]> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const fallback = new Promise<readonly QuestTemplate[]>((resolve) => {
+      timer = setTimeout(() => resolve(DAILY_TEMPLATES), FIRST_DROP_DESIGN_BUDGET_MS);
+    });
+    return Promise.race([gemini(player), fallback]).finally(() => clearTimeout(timer));
+  };
+  try {
+    await dropForPlayer(playerId, now, design);
+  } catch (error: unknown) {
+    console.error('[calibration] first vow drop failed:', error instanceof Error ? error.message : error);
+  }
 }
 
 // ── Submit (dispatch) ───────────────────────────────────────────────────────
