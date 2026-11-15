@@ -4,6 +4,7 @@
  * after every change. Callers `await loadWallet()` before the sync helpers below.
  */
 import * as db from './db';
+import { createLatestWriter } from './latestWriter';
 
 export interface Wallet {
   playerId: string;
@@ -22,10 +23,15 @@ function wallets(): Map<string, Wallet> {
 
 const empty = (playerId: string): Wallet => ({ playerId, balance: 0, earned: 0, shields: 0, cosmetics: [], lastHalveAt: null });
 
+/** Full-row upserts, in order per wallet (the newest row is always the last to land). */
+const writeWallet = createLatestWriter<Wallet>(
+  'wallet',
+  (wallet) => db.upsertWallet(wallet),
+  (playerId, error) => console.error(`[wallet] persist failed for ${playerId}:`, error instanceof Error ? error.message : error),
+);
+
 function persist(wallet: Wallet): void {
-  Promise.resolve()
-    .then(() => db.upsertWallet(wallet))
-    .catch((error: unknown) => console.error('[wallet] persist failed:', error instanceof Error ? error.message : error));
+  writeWallet(wallet.playerId, wallet);
 }
 
 export async function loadWallet(playerId: string): Promise<Wallet> {
