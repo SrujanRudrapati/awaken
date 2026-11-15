@@ -20,14 +20,14 @@ describe('chronicle → Supermemory', () => {
     const seen = new Set<string>();
     const entry = entryFor({ type: 'quest.update', quest: quest() }, seen);
 
-    expect(entry?.content).toMatch(/FAILED quest "Squats: 20 reps" \(squat, STR, daily\) — reached 7 of 20/);
+    expect(entry?.content).toMatch(/BROKE vow "Squats: 20 reps" \(squat, Body, daily\) — reached 7 of 20/);
     expect(entry?.metadata).toEqual({ outcome: 'failed', questType: 'squat', stat: 'STR' });
     expect(entryFor({ type: 'quest.update', quest: quest() }, seen)).toBeNull();
   });
 
   it('records clears and rank-ups; ignores progress and noise', () => {
     const seen = new Set<string>();
-    expect(entryFor({ type: 'quest.complete', quest: quest({ status: 'done' }), xpGained: 30 }, seen)?.content).toMatch(/cleared .* for 30 XP/);
+    expect(entryFor({ type: 'quest.complete', quest: quest({ status: 'done' }), xpGained: 30 }, seen)?.content).toMatch(/Kept vow .* for 30 Proof/);
     expect(entryFor({ type: 'levelup', playerId: 'p1', fromRank: 'E', toRank: 'D', level: 3 }, seen)?.content).toMatch(/level 3 and rank D \(from E\)/);
     expect(entryFor({ type: 'quest.update', quest: quest({ status: 'active' }) }, seen)).toBeNull();
     expect(entryFor({ type: 'rep', playerId: 'p1', questId: 'q1', count: 3 }, seen)).toBeNull();

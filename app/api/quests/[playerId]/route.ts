@@ -10,10 +10,10 @@ export async function GET(
 ): Promise<Response> {
   await connection();
   const id = PlayerIdSchema.safeParse((await params).playerId);
-  if (!id.success) return fail(400, 'Invalid player id');
+  if (!id.success) return fail(400, 'Invalid id');
   try {
     const player = await getPlayer(id.data);
-    if (!player) return fail(404, `No player ${id.data}`);
+    if (!player) return fail(404, `No one found with id ${id.data}`);
     return ok({ player, quests: listQuests(id.data) });
   } catch (error) {
     return errorResponse(error, 'quests');

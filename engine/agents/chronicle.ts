@@ -5,6 +5,7 @@
  * (instrumentation.ts); does nothing when Supermemory isn't configured.
  */
 import { subscribe } from '../../lib/bus';
+import { STAT_LABELS } from '../../lib/brand';
 import { isMemoryConfigured, remember } from '../../lib/memory';
 import type { Quest, StreamEvent } from '../../lib/schemas';
 
@@ -19,7 +20,7 @@ function day(): string {
 }
 
 function questLabel(quest: Quest): string {
-  return `"${quest.title}" (${quest.type}, ${quest.stat}${quest.kind && quest.kind !== 'manual' ? `, ${quest.kind}` : ''})`;
+  return `"${quest.title}" (${quest.type}, ${STAT_LABELS[quest.stat]}${quest.kind && quest.kind !== 'manual' ? `, ${quest.kind}` : ''})`;
 }
 
 export interface MemoryEntry {
@@ -37,7 +38,7 @@ export function entryFor(event: StreamEvent, recordedFailures: Set<string>): Mem
       return {
         playerId: quest.playerId,
         kind: 'quest',
-        content: `${day()}: Player cleared quest ${questLabel(quest)} for ${event.xpGained} XP.`,
+        content: `${day()}: Kept vow ${questLabel(quest)} for ${event.xpGained} Proof.`,
         metadata: { outcome: 'done', questType: quest.type, stat: quest.stat },
       };
     }
@@ -48,7 +49,7 @@ export function entryFor(event: StreamEvent, recordedFailures: Set<string>): Mem
       return {
         playerId: quest.playerId,
         kind: 'quest',
-        content: `${day()}: Player FAILED quest ${questLabel(quest)} — reached ${Math.floor(quest.progress)} of ${quest.target}.`,
+        content: `${day()}: BROKE vow ${questLabel(quest)} — reached ${Math.floor(quest.progress)} of ${quest.target}.`,
         metadata: { outcome: 'failed', questType: quest.type, stat: quest.stat },
       };
     }
@@ -56,7 +57,7 @@ export function entryFor(event: StreamEvent, recordedFailures: Set<string>): Mem
       return {
         playerId: event.playerId,
         kind: 'milestone',
-        content: `${day()}: Player reached level ${event.level}${event.fromRank !== event.toRank ? ` and rank ${event.toRank} (from ${event.fromRank})` : ''}.`,
+        content: `${day()}: Ascended to level ${event.level}${event.fromRank !== event.toRank ? ` and rank ${event.toRank} (from ${event.fromRank})` : ''}.`,
         metadata: { level: event.level, rank: event.toRank },
       };
     default:

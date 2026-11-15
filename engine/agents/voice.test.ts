@@ -44,7 +44,7 @@ describe('System voice', () => {
     await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
 
     expect(voices).toEqual([{ type: 'voice', text: 'Rank D confirmed. You are no longer weak.', eventType: 'levelup', playerId: 'p1' }]);
-    expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('Rank E → D');
+    expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('rank E → D');
   });
 
   it('falls back to a canned line when the model is offline or rambles', async () => {
@@ -95,28 +95,28 @@ describe('System voice', () => {
   });
 
   it('awakening speaks for a new player and carries the Polly audio URL when available', async () => {
-    vi.mocked(claude).mockResolvedValue('Awakening confirmed. Your trials begin now, Player.');
+    vi.mocked(claude).mockResolvedValue('Oath recorded. Calibration begins. Try to impress me.');
     vi.mocked(speak).mockResolvedValueOnce(`/api/voice/${'a'.repeat(64)}.mp3`);
 
     announceAwakening('p9', 'Mina');
     await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
 
     expect(voices).toEqual([
-      { type: 'voice', eventType: 'awakening', playerId: 'p9', text: 'Awakening confirmed. Your trials begin now, Player.', audioUrl: `/api/voice/${'a'.repeat(64)}.mp3` },
+      { type: 'voice', eventType: 'awakening', playerId: 'p9', text: 'Oath recorded. Calibration begins. Try to impress me.', audioUrl: `/api/voice/${'a'.repeat(64)}.mp3` },
     ]);
     expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('Mina');
   });
 
   it('feeds what the System remembers about the player into the line', async () => {
     vi.mocked(recall).mockResolvedValueOnce('Failed squats twice this week');
-    vi.mocked(claude).mockResolvedValue('You skipped squats twice. Not today, Player.');
+    vi.mocked(claude).mockResolvedValue('You skipped squats twice. The Reckoning remembers.');
 
     publish({ type: 'penalty', playerId: 'p1', questId: 'q1', reason: 'Squats missed' });
     await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
 
     expect(vi.mocked(recall).mock.calls[0][0]).toBe('p1');
     expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('Failed squats twice this week');
-    expect(voices[0].text).toBe('You skipped squats twice. Not today, Player.');
+    expect(voices[0].text).toBe('You skipped squats twice. The Reckoning remembers.');
   });
 
   it('startVoice twice does not double-speak', async () => {
@@ -130,7 +130,8 @@ describe('System voice', () => {
 
 describe('sanitizeLine', () => {
   it('keeps one clean line of ≤ 15 words, drops quotes, markdown and exclamation', () => {
-    expect(sanitizeLine('"**Rise, Player!**"\nsecond line')).toBe('Rise, Player.');
+    expect(sanitizeLine('"**Rise, Oathbearer!**"\nsecond line')).toBe('Rise, Oathbearer.');
+    expect(sanitizeLine('Arise, Player.')).toBeNull(); // old-brand words never reach the speakers
     expect(sanitizeLine('one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen')).toBeNull();
     expect(sanitizeLine('   ')).toBeNull();
   });

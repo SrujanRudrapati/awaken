@@ -96,7 +96,7 @@ describe('quest engine', () => {
     expect(sendAll).toHaveBeenCalledWith(['BUZZ:chime', 'SEG:   3']);
   });
 
-  it('publishes levelup and shows LVUP then the rank on the display', async () => {
+  it('publishes levelup and shows ASCN then the rank on the display', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await createPlayer({ name: 'Jin', id: 'p1' });
     const quest = await startQuest('p1', { type: 'gate', difficulty: 'hard' }); // 120 XP
@@ -106,10 +106,10 @@ describe('quest engine', () => {
     expect(leveledUp).toBe(true);
     expect(player).toMatchObject({ xp: 120, level: 3, rank: 'D' });
     expect(ofType('levelup')).toEqual([{ type: 'levelup', playerId: 'p1', fromRank: 'E', toRank: 'D', level: 3 }]);
-    expect(sendAll).toHaveBeenCalledWith(['BUZZ:chime', 'SEG:LVUP']);
-    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: '[QUEST COMPLETE]' }));
+    expect(sendAll).toHaveBeenCalledWith(['BUZZ:chime', 'SEG:ASCN']);
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: '[VOW KEPT]' }));
     expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ title: '[LEVEL UP]', message: 'Jin reached level 3 · Rank D', priority: 'high' }),
+      expect.objectContaining({ title: '[ASCENSION]', message: 'Jin ascends to level 3 · Rank D', priority: 'high' }),
     );
     await vi.advanceTimersByTimeAsync(2_000);
     expect(send).toHaveBeenCalledWith('SEG:RK-D');
@@ -182,7 +182,7 @@ describe('quest engine', () => {
     expect((await getPlayer('p1'))?.penalty).toBe(true);
     expect(ofType('penalty')).toEqual([{ type: 'penalty', playerId: 'p1', questId: quest.id, reason: 'Gave up' }]);
     expect(sendAll).toHaveBeenCalledWith(['BUZZ:alarm', 'SEG:FAIL']);
-    expect(notify).toHaveBeenCalledWith({ title: '[PENALTY ZONE]', message: 'Gave up', priority: 'urgent', tags: ['warning'] });
+    expect(notify).toHaveBeenCalledWith({ title: '[THE RECKONING]', message: 'Gave up', priority: 'urgent', tags: ['warning'] });
     expect(penaltyQuest).toMatchObject({ type: 'squat', difficulty: 'hard', kind: 'penalty', status: 'active' });
     expect(getActiveQuest('p1')).toBeUndefined(); // sensors stop counting the failed quest
   });
@@ -318,7 +318,7 @@ describe('quest engine', () => {
 
       expect(quest).toMatchObject({ kind: 'emergency', target: 10, type: 'pushup' });
       expect(sendAll).toHaveBeenCalledWith(['BUZZ:alarm', 'SEG:  30']);
-      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: '[EMERGENCY QUEST]', priority: 'urgent' }));
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: '[URGENT VOW]', priority: 'urgent' }));
       await vi.advanceTimersByTimeAsync(1_000);
       expect(send).toHaveBeenCalledWith('SEG:  29');
 
@@ -446,7 +446,7 @@ describe('quest engine', () => {
       expect(first.b).toHaveLength(DAILY_TEMPLATES.length);
       expect(first.a.every((q) => q.kind === 'daily' && q.deadline.startsWith('2026-11-1'))).toBe(true);
       expect(second.a).toEqual([]);
-      const daily = vi.mocked(notify).mock.calls.filter(([n]) => n.title === '[DAILY QUEST HAS ARRIVED]');
+      const daily = vi.mocked(notify).mock.calls.filter(([n]) => n.title === "[TODAY'S VOWS]");
       expect(daily).toHaveLength(1); // one alert for the drop, none for the empty second call
       expect(daily[0][0].message.split('\n')).toHaveLength(DAILY_TEMPLATES.length); // titles deduped across players
     });

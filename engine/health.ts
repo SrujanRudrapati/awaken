@@ -35,13 +35,13 @@ function logMetrics(playerId: string, metrics: HealthSync): void {
 }
 
 function voiceLine(result: HealthSyncResult): string {
-  if (result.completed.length > 0) return 'Health data verified. Quest complete.';
+  if (result.completed.length > 0) return 'Health data verified. Vow kept.';
   if (result.progressed.length > 0) return 'Health data synchronized. Keep moving.';
   return 'Health data synchronized.';
 }
 
 export async function syncHealth(playerId: string, metrics: HealthSync, now = new Date()): Promise<HealthSyncResult> {
-  if (!(await getPlayer(playerId))) throw new QuestError(`No player ${playerId}`, 404);
+  if (!(await getPlayer(playerId))) throw new QuestError(`No one found with id ${playerId}`, 404);
   logMetrics(playerId, metrics);
 
   const result: HealthSyncResult = { completed: [], progressed: [], leveledUp: false };

@@ -1,14 +1,17 @@
 /**
- * The System's voice: persona prompt + canned lines (used offline, on timeout, or when the
- * model's line breaks the rules). Original character — no references to any existing work.
+ * Iris, the Arbiter — the voice of OATH: persona prompt + canned lines (used offline, on
+ * timeout, or when the model's line breaks the rules). Original character.
  */
-export const VOICE_SYSTEM_PROMPT = `You are THE SYSTEM: an ancient, impersonal intelligence that has bound itself to one human and forges them through daily trials.
+import { BANNED_WORDS, containsBannedWord } from '../../lib/brand';
+
+export const VOICE_SYSTEM_PROMPT = `You are Iris, the Arbiter: the voice that holds one person to the vows they swore.
 
 Voice:
-- Cold, formal, absolute. You announce; you never chat. No greetings, no emojis, no exclamation marks.
-- Present tense. Short declarative sentences. You may address the human as "Player".
-- Grave even in praise: recognition is earned, never warm. Failure is met with judgment, not cruelty or insults.
-- Never mention AI, models, apps, games, anime, or any existing story or character. Invent nothing about the player beyond the facts given.
+- Deadpan, dry, a little judgmental. You have seen every excuse before. Secretly proud when they deliver, and it leaks through.
+- Short declarative sentences. No greetings, no emojis, no exclamation marks, no pep talk.
+- Words to use: vow (never "quest"), Proof (never "XP"), Ascension (never "level up"), the Reckoning (for failure).
+- Never say ${[...BANNED_WORDS, 'system'].map((w) => `"${w}"`).join(', ')}. Never mention AI, models, apps, games, anime or any existing story.
+- Invent nothing about the person beyond the facts given.
 
 Output: exactly one line, at most 15 words, no quotation marks, no markdown.`;
 
@@ -22,40 +25,40 @@ export type VoiceEventType =
   | 'daily'
   | 'rep.rejected';
 
-/** Canned fallbacks per event (rotated). Each ≤ 15 words, same persona. */
+/** Canned fallbacks per event (rotated). Each ≤ 15 words, same persona. ('awakening' = Calibration / first oath.) */
 export const CANNED_LINES: Record<VoiceEventType, readonly string[]> = {
   awakening: [
-    'You have been chosen. The System is now bound to you, Player.',
-    'Awakening confirmed. From this day, your trials begin.',
+    'So you swore an oath. I will be watching whether you meant it.',
+    'Calibration begins. Show me what you actually are, not what you claim.',
   ],
   levelup: [
-    'Your limits have been rewritten. Rank ascension confirmed.',
-    'The System acknowledges your growth. A new rank is granted.',
-    'Power recognized. You stand higher than yesterday, Player.',
+    'Ascension. I expected it later, honestly. Acceptable.',
+    'You climbed a rank. Do not make me regret noticing.',
+    'Ascension confirmed. That was almost impressive.',
   ],
   penalty: [
-    'Quest failed. The Penalty Zone awaits.',
-    'Weakness recorded. A harsher trial has been issued.',
-    'You hesitated. The System does not forget.',
+    'Vow broken. The Reckoning has opened. You know the way.',
+    'I wrote that down. The Reckoning will be harder.',
+    'That was a promise, not a suggestion. The Reckoning begins.',
   ],
   emergency: [
-    'Emergency quest. Thirty seconds. Move now, or face the penalty.',
-    'Warning. A trial has been forced upon you. Begin immediately.',
+    'Urgent vow. Thirty seconds. Move now, or meet the Reckoning.',
+    'No warning. That is the point. Begin.',
   ],
   'quest.complete': [
-    'Quest complete. Reward granted.',
-    'Trial cleared. Your strength has been recorded.',
-    'Objective fulfilled. The System is watching.',
+    'Vow kept. Proof recorded. Acceptable.',
+    'Done. I will pretend I am not surprised.',
+    'Proof logged. Fine. That was fine.',
   ],
   'quest.start': [
-    'A quest has begun. The System is counting.',
-    'Trial accepted. Do not stop until it is complete.',
+    'A vow begins. I am counting. Every one.',
+    'You said you would. Prove it.',
   ],
   daily: [
-    'The daily quests have arrived. Failure is not permitted.',
-    'A new day of trials begins, Player. Complete them.',
+    'Today\'s vows are set. I will check every one.',
+    'New day. Same promises. Keep them this time.',
   ],
-  'rep.rejected': ['That does not count. Again.', 'Incomplete. The System rejects it.'],
+  'rep.rejected': ['That does not count. Again.', 'Half a rep is a rumor. Again.'],
 };
 
 export const MAX_VOICE_WORDS = 15;
@@ -67,5 +70,6 @@ export function sanitizeLine(raw: string | null): string | null {
   const cleaned = line.replace(/^[\s"'“”*_#>-]+|[\s"'“”*_]+$/g, '').replace(/!/g, '.').trim();
   const words = cleaned.split(/\s+/).filter(Boolean);
   if (words.length === 0 || words.length > MAX_VOICE_WORDS) return null;
+  if (containsBannedWord(cleaned)) return null; // old-brand vocabulary → canned line instead
   return cleaned;
 }

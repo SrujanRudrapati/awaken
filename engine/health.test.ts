@@ -37,7 +37,7 @@ describe('syncHealth', () => {
     expect(result.completed.map((q) => q.id).sort()).toEqual([steps.id, run.id].sort());
     expect(getQuest(steps.id)?.status).toBe('done');
     expect((await getPlayer('p1'))?.xp).toBe(steps.xp + run.xp);
-    expect(events).toContainEqual(expect.objectContaining({ type: 'voice', text: 'Health data verified. Quest complete.' }));
+    expect(events).toContainEqual(expect.objectContaining({ type: 'voice', text: 'Health data verified. Vow kept.' }));
   });
 
   it('records partial progress without completing, and never lowers it', async () => {

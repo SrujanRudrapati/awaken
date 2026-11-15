@@ -58,7 +58,7 @@ describe('weekly boss report', () => {
     expect(result.report.orders).toHaveLength(3);
     const [req] = vi.mocked(claudeJson).mock.calls[0];
     expect(req.model).toBe(OPUS);
-    expect(req.prompt).toContain('STR 90');
+    expect(req.prompt).toContain('Body 90');
   });
 
   it('falls back to a code-written report when Opus is offline or breaks format', async () => {
@@ -67,7 +67,7 @@ describe('weekly boss report', () => {
     const result = await weeklyReport('p1', { now: NOW });
 
     expect(result.source).toBe('fallback');
-    expect(result.report.verdict).toContain('110 XP');
+    expect(result.report.verdict).toContain('110 Proof');
     expect(result.report.orders).toHaveLength(3);
   });
 

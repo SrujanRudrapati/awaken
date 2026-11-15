@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { HunterClient } from './HunterClient';
 
 export const metadata: Metadata = {
-  title: 'Awaken — Hunter',
-  description: 'Phone armband sensor and System window',
+  title: 'Oath — Armband',
+  description: 'Phone armband sensor and Iris window',
 };
 
 export const viewport: Viewport = {

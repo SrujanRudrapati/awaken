@@ -1,5 +1,5 @@
 /**
- * The System's voice. Listens to the bus, picks the most important moment in a short window
+ * Iris's voice. Listens to the bus, picks the most important moment in a short window
  * (a level-up beats the quest completion that caused it), asks Haiku for one ≤15-word line,
  * and publishes a `voice` event — falling back to a canned line if the model is slow or offline.
  *
@@ -55,19 +55,19 @@ const globalForVoice = globalThis as typeof globalThis & { __awakenVoice?: Voice
 export function momentFor(event: StreamEvent, seenQuestIds: Set<string>): Moment | null {
   switch (event.type) {
     case 'levelup':
-      return { type: 'levelup', playerId: event.playerId, facts: `Rank ${event.fromRank} → ${event.toRank}, level ${event.level}.` };
+      return { type: 'levelup', playerId: event.playerId, facts: `Ascension: rank ${event.fromRank} → ${event.toRank}, level ${event.level}.` };
     case 'penalty':
-      return { type: 'penalty', playerId: event.playerId, facts: `Failure: ${event.reason}` };
+      return { type: 'penalty', playerId: event.playerId, facts: `Vow broken: ${event.reason}` };
     case 'quest.complete':
-      return { type: 'quest.complete', playerId: event.quest.playerId, facts: `Completed "${event.quest.title}" for ${event.xpGained} XP.` };
+      return { type: 'quest.complete', playerId: event.quest.playerId, facts: `Vow kept: "${event.quest.title}" for ${event.xpGained} Proof.` };
     case 'quest.update': {
       const { quest } = event;
       if (quest.status !== 'active' || seenQuestIds.has(quest.id)) return null;
       seenQuestIds.add(quest.id);
-      if (quest.kind === 'emergency') return { type: 'emergency', playerId: quest.playerId, facts: `Emergency: "${quest.title}".` };
-      if (quest.kind === 'daily') return { type: 'daily', playerId: quest.playerId, facts: 'New daily quests were issued.' };
+      if (quest.kind === 'emergency') return { type: 'emergency', playerId: quest.playerId, facts: `Urgent vow: "${quest.title}".` };
+      if (quest.kind === 'daily') return { type: 'daily', playerId: quest.playerId, facts: "Today's vows were issued." };
       if (quest.kind === 'penalty') return null; // the `penalty` event already speaks for it
-      return { type: 'quest.start', playerId: quest.playerId, facts: `Quest started: "${quest.title}".` };
+      return { type: 'quest.start', playerId: quest.playerId, facts: `Vow started: "${quest.title}".` };
     }
     case 'rep.rejected':
       return { type: 'rep.rejected', playerId: event.playerId, facts: event.reason };
@@ -84,7 +84,7 @@ function canned(state: VoiceState, type: VoiceEventType): string {
 
 async function promptFor(moment: Moment): Promise<string> {
   const memory = moment.playerId ? await recall(moment.playerId, VOICE_RECALL_QUERY, VOICE_RECALL_TIMEOUT_MS) : null;
-  const callback = memory ? `\nWhat the System remembers (use one callback only if it fits): ${memory}` : '';
+  const callback = memory ? `\nWhat Iris remembers (use one callback only if it fits): ${memory}` : '';
   return `Event: ${moment.type}. ${moment.facts}${callback}\nAnnounce it.`;
 }
 
@@ -125,11 +125,11 @@ function queueMoment(state: VoiceState, moment: Moment | null): void {
   }, VOICE_WINDOW_MS);
 }
 
-/** A new player was created: the System binds itself to them (no bus event exists for this). */
+/** Someone new swore their first oath: Iris greets them (no bus event exists for this). */
 export function announceAwakening(playerId: string, name: string): void {
   startVoice();
   const state = globalForVoice.__awakenVoice;
-  if (state) queueMoment(state, { type: 'awakening', playerId, facts: `A new player named ${name} has awakened.` });
+  if (state) queueMoment(state, { type: 'awakening', playerId, facts: `${name} has sworn their first oath. Calibration begins.` });
 }
 
 /** Starts the voice once per process (safe to call from every route). */

@@ -7,6 +7,7 @@
 import { z } from 'zod';
 import { claudeJson } from '../../lib/ai/claude';
 import * as db from '../../lib/db';
+import { BANNED_WORDS, STAT_LABELS, containsBannedWord } from '../../lib/brand';
 import { OPUS } from '../../lib/models';
 import { StatSchema, type Player, type Quest, type Stat } from '../../lib/schemas';
 import { QuestError, getPlayer, listQuests } from '../quests';
@@ -52,9 +53,10 @@ export interface WeeklyReport {
   report: BossReport;
 }
 
-const SYSTEM = `You are THE SYSTEM: an ancient, impersonal intelligence that forges one human through daily trials.
-Write the weekly judgment. Cold, formal, absolute; grave even in praise; judgment, never insults. No emojis, no exclamation marks.
-Never mention AI, models, apps, games, anime, or any existing story. Use ONLY the facts given; invent nothing.
+const SYSTEM = `You are Iris, the Arbiter: the voice that holds one person to the vows they swore.
+Write the weekly judgment. Deadpan, dry, a little judgmental; secretly proud when it is earned. No emojis, no exclamation marks.
+Vocabulary: vow (not quest), Proof (not XP), Ascension (not level up), the Reckoning (failure). Stats: Body, Mind, Focus, Vitality, Discipline, Presence.
+Never say ${[...BANNED_WORDS, 'system'].join(', ')}. Never mention AI, models, apps, games, anime, or any existing story. Use ONLY the facts given; invent nothing.
 JSON fields: title (≤ 8 words), verdict (one sentence), summary (≤ 70 words), orders (exactly ${ORDERS} short imperative orders for next week, each ≤ 14 words, aimed at the weakest stats).`;
 
 const globalForBoss = globalThis as typeof globalThis & { __awakenBoss?: Map<string, WeeklyReport> };
@@ -83,12 +85,12 @@ export function weekFacts(history: readonly db.StatHistoryRow[], quests: readonl
 }
 
 function describe(player: Player, facts: WeekFacts): string {
-  const xp = StatSchema.options.map((s) => `${s} ${facts.xpByStat[s]}`).join(', ');
+  const xp = StatSchema.options.map((s) => `${STAT_LABELS[s]} ${facts.xpByStat[s]}`).join(', ');
   return [
-    `Player: rank ${player.rank}, level ${player.level}${player.penalty ? ', currently in the Penalty Zone' : ''}.`,
-    `XP gained in the last ${REPORT_DAYS} days by stat: ${xp} (total ${facts.totalXp}).`,
-    `Active days: ${facts.activeDays}/${REPORT_DAYS}. Quests cleared: ${facts.completed}. Quests failed: ${facts.failed}.`,
-    `Strongest stat: ${facts.strongest ?? 'none'}. Weakest stat: ${facts.weakest}.`,
+    `Rank ${player.rank}, level ${player.level}${player.penalty ? ', currently in the Reckoning' : ''}.`,
+    `Proof earned in the last ${REPORT_DAYS} days by stat: ${xp} (total ${facts.totalXp}).`,
+    `Active days: ${facts.activeDays}/${REPORT_DAYS}. Vows kept: ${facts.completed}. Vows broken: ${facts.failed}.`,
+    `Strongest stat: ${facts.strongest ? STAT_LABELS[facts.strongest] : 'none'}. Weakest stat: ${STAT_LABELS[facts.weakest]}.`,
   ].join('\n');
 }
 
@@ -99,20 +101,22 @@ export function validateReport(raw: z.infer<typeof ReportSchema> | null): BossRe
   const orders = raw.orders.map((o) => clean(o, 120)).filter(Boolean);
   const report = { title: clean(raw.title, 80), verdict: clean(raw.verdict, 200), summary: clean(raw.summary, 600), orders };
   if (!report.title || !report.verdict || !report.summary || orders.length < ORDERS) return null;
+  if ([report.title, report.verdict, report.summary, ...orders].some(containsBannedWord)) return null;
   return { ...report, orders: orders.slice(0, ORDERS) };
 }
 
 export function fallbackReport(facts: WeekFacts): BossReport {
   const idle = facts.totalXp === 0;
+  const weakest = STAT_LABELS[facts.weakest];
   return {
     title: idle ? 'A Week of Silence' : 'Weekly Judgment',
     verdict: idle
-      ? 'No growth was recorded. The System does not reward absence.'
-      : `${facts.totalXp} XP earned. ${facts.weakest} lags behind and will be addressed.`,
-    summary: `Active on ${facts.activeDays} of ${REPORT_DAYS} days. ${facts.completed} quests cleared, ${facts.failed} failed.${
-      facts.strongest ? ` ${facts.strongest} carried you.` : ''
-    } ${facts.weakest} is your weakest stat.`,
-    orders: [`Train ${facts.weakest} every day.`, 'Clear every daily quest before midnight.', 'Fail nothing. The Penalty Zone is watching.'],
+      ? 'No Proof was recorded. Absence is not a strategy.'
+      : `${facts.totalXp} Proof earned. ${weakest} lags behind, and I noticed.`,
+    summary: `Active on ${facts.activeDays} of ${REPORT_DAYS} days. ${facts.completed} vows kept, ${facts.failed} broken.${
+      facts.strongest ? ` ${STAT_LABELS[facts.strongest]} carried you.` : ''
+    } ${weakest} is your weakest stat.`,
+    orders: [`Train ${weakest} every day.`, 'Keep every vow before midnight.', 'Break nothing. The Reckoning is patient.'],
   };
 }
 

@@ -238,9 +238,9 @@ export type WatchRepResult =
 export function applyWatchReps(playerId: string, exercise: QuestType, count: number): WatchRepResult {
   const state = getState();
   const entry = state.active.get(playerId);
-  if (!entry) return { ok: false, reason: 'No active sensor quest for this player' };
+  if (!entry) return { ok: false, reason: 'No active sensor vow right now' };
   if (entry.quest.type !== exercise || !entry.verifiers.watch) {
-    return { ok: false, reason: `Active quest is ${entry.quest.type}, not ${exercise}` };
+    return { ok: false, reason: `The active vow is ${entry.quest.type}, not ${exercise}` };
   }
   const { id: questId } = entry.quest;
   const applied = Math.min(Math.max(0, count - entry.watchReps), MAX_WATCH_REPS_PER_REPORT);

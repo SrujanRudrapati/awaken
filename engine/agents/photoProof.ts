@@ -16,7 +16,7 @@ export const MIN_CONFIDENCE = 0.7;
 export const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const VISION_TIMEOUT_MS = 15_000;
 const MAX_REASON_CHARS = 200;
-const OFFLINE_REASON = 'The System could not verify this photo. Submit it again.';
+const OFFLINE_REASON = 'Iris could not verify this photo. Submit it again.';
 
 const RawVerdictSchema = z.object({
   passed: z.boolean(),
@@ -63,9 +63,9 @@ export interface PhotoProofResult extends Verdict {
 
 function requirePhotoQuest(playerId: string, questId: string) {
   const quest = getQuest(questId);
-  if (!quest || quest.playerId !== playerId) throw new QuestError(`No quest ${questId} for ${playerId}`, 404);
-  if (quest.type !== 'photo') throw new QuestError(`Quest ${questId} is not a photo quest`, 400);
-  if (quest.status !== 'active') throw new QuestError(`Quest ${questId} is already ${quest.status}`, 409);
+  if (!quest || quest.playerId !== playerId) throw new QuestError(`No vow ${questId} for ${playerId}`, 404);
+  if (quest.type !== 'photo') throw new QuestError(`Vow ${questId} is not a photo vow`, 400);
+  if (quest.status !== 'active') throw new QuestError(`Vow ${questId} is already ${quest.status}`, 409);
   return quest;
 }
 

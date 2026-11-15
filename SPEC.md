@@ -43,6 +43,15 @@ Also: USB cable, cardboard/foam box (the "System Core"), tape, a phone-sized slo
 - **D – Story/pitch:** mascot art, quest content, Devpost, video, demo rehearsal (helps C)
 
 ---
+## Brand: OATH (user-facing text only — 2026-11-14)
+Everything people see or hear uses OATH vocabulary; identifiers, DB columns, routes and SSE event names keep their
+original names (`quest`, `xp`, `playerId`, `/api/quest/...`, `quest.complete`, `levelup`, `penalty`). Source of truth: `lib/brand.ts`.
+System → **Iris, the Arbiter** · quest → **vow** · XP → **Proof** · level up → **Ascension** · Awakening Test → **Calibration** ·
+Penalty Zone → **the Reckoning** · league → **Constellation** · gold → **Shards** · gate → **Field Vow** ·
+stats STR/INT/FOCUS/VIT/DISCIPLINE/CHA → **Body/Mind/Focus/Vitality/Discipline/Presence**. Ranks **E → D → C → B → A** (A is top; no S).
+Never user-visible: player, hunter, awaken, dungeon, shadow, arise (`lib/brand.test.ts` enforces; model lines with them are replaced by canned ones).
+Where this document still says System/quest/XP/Penalty Zone, read the OATH term.
+
 ## 1. The idea (plain words)
 Your whole life is an RPG. Every day the System gives you quests across 6 stats. **Every quest must be proven** — by sensors, photos, quizzes or real-world check-ins. Complete quests → XP → level up E-Rank → S-Rank. Miss them → **Penalty Zone** (alarm, red screen, harder quest tomorrow). Friends compete in Guilds.
 

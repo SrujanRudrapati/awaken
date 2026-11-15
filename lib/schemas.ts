@@ -12,7 +12,8 @@ export type Bit = z.infer<typeof BitSchema>;
 export const StatSchema = z.enum(['STR', 'INT', 'FOCUS', 'VIT', 'DISCIPLINE', 'CHA']);
 export type Stat = z.infer<typeof StatSchema>;
 
-export const RankSchema = z.enum(['E', 'D', 'C', 'B', 'A', 'S']);
+/** Rank letters, E (start) → A (top). There is no S rank. */
+export const RankSchema = z.enum(['E', 'D', 'C', 'B', 'A']);
 export type Rank = z.infer<typeof RankSchema>;
 
 export const QuestTypeSchema = z.enum([

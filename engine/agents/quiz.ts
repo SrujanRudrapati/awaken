@@ -71,9 +71,9 @@ export interface PublicQuestion {
 
 function requireQuizQuest(playerId: string, questId: string): void {
   const quest = getQuest(questId);
-  if (!quest || quest.playerId !== playerId) throw new QuestError(`No quest ${questId} for ${playerId}`, 404);
-  if (quest.type !== 'quiz') throw new QuestError(`Quest ${questId} is not a quiz`, 400);
-  if (quest.status !== 'active') throw new QuestError(`Quest ${questId} is already ${quest.status}`, 409);
+  if (!quest || quest.playerId !== playerId) throw new QuestError(`No vow ${questId} for ${playerId}`, 404);
+  if (quest.type !== 'quiz') throw new QuestError(`Vow ${questId} is not a trial`, 400);
+  if (quest.status !== 'active') throw new QuestError(`Vow ${questId} is already ${quest.status}`, 409);
 }
 
 /** Creates (or returns the already-issued) questions for an active quiz quest. */
@@ -97,7 +97,7 @@ export interface QuizResult {
 export async function answerQuiz(playerId: string, questId: string, answers: readonly number[]): Promise<QuizResult> {
   requireQuizQuest(playerId, questId);
   const questions = state().quizzes.get(questId);
-  if (!questions) throw new QuestError('Start the quiz first', 409);
+  if (!questions) throw new QuestError('Start the trial first', 409);
   if (answers.length !== questions.length) throw new QuestError(`Send ${questions.length} answers`, 400);
 
   state().quizzes.delete(questId); // one attempt
@@ -105,7 +105,7 @@ export async function answerQuiz(playerId: string, questId: string, answers: rea
   const passed = correct >= PASS_MARK;
   const completion = passed
     ? await completeQuest(playerId, questId)
-    : (await failQuest(playerId, questId, `Focus quiz failed: ${correct}/${questions.length} correct`), null);
+    : (await failQuest(playerId, questId, `Focus trial failed: ${correct}/${questions.length} correct`), null);
   return { correct, passed, answers: questions.map((q) => q.answerIndex), completion };
 }
 

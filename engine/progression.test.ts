@@ -3,12 +3,12 @@ import { QuestTypeSchema } from '../lib/schemas';
 import { QUEST_RULES, demoRankUpXp, endOfDay, levelForXp, rankForXp, rankSegment, segNumber, xpFor } from './progression';
 
 describe('progression', () => {
-  it.each([[0, 100], [40, 60], [100, 200], [2999, 1], [3000, 0]])('xp %i → %i XP to the next rank', (xp, need) => {
+  it.each([[0, 100], [40, 60], [100, 200], [1499, 1], [1500, 0], [3000, 0]])('xp %i → %i XP to the next rank', (xp, need) => {
     expect(demoRankUpXp(xp)).toBe(need);
   });
 
   it.each([
-    [0, 'E'], [99, 'E'], [100, 'D'], [299, 'D'], [300, 'C'], [700, 'B'], [1499, 'B'], [1500, 'A'], [3000, 'S'], [99999, 'S'],
+    [0, 'E'], [99, 'E'], [100, 'D'], [299, 'D'], [300, 'C'], [700, 'B'], [1499, 'B'], [1500, 'A'], [3000, 'A'], [99999, 'A'], // A is the top rank (no S)
   ] as const)('xp %i → rank %s', (xp, rank) => {
     expect(rankForXp(xp)).toBe(rank);
   });

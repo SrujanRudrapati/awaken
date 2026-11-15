@@ -7,7 +7,7 @@ import { PlayerIdSchema, errorResponse } from '../../_lib/http';
 export async function GET(request: Request, { params }: { params: Promise<{ playerId: string }> }): Promise<Response> {
   await connection();
   const id = PlayerIdSchema.safeParse((await params).playerId);
-  if (!id.success) return fail(400, 'Invalid player id');
+  if (!id.success) return fail(400, 'Invalid id');
   try {
     const fresh = new URL(request.url).searchParams.get('fresh') === '1';
     return ok(await weeklyReport(id.data, { fresh }));

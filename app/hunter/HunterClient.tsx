@@ -65,7 +65,7 @@ export function HunterClient() {
       setQuests(data.quests);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not reach the System');
+      setError(e instanceof Error ? e.message : 'Could not reach Iris');
     }
   }, []);
 
@@ -80,7 +80,7 @@ export function HunterClient() {
         setError(null);
       })
       .catch((e: unknown) => {
-        if (isCurrent) setError(e instanceof Error ? e.message : 'Could not reach the System');
+        if (isCurrent) setError(e instanceof Error ? e.message : 'Could not reach Iris');
       });
     return () => {
       isCurrent = false;
@@ -112,17 +112,17 @@ export function HunterClient() {
         case 'quest.complete':
           if (event.quest.playerId !== playerId) return;
           setQuests((qs) => upsertQuest(qs, event.quest));
-          setOverlay({ id: Date.now(), tone: 'blue', header: '[QUEST COMPLETE]', title: event.quest.title, detail: `+${event.xpGained} XP` });
+          setOverlay({ id: Date.now(), tone: 'blue', header: '[VOW KEPT]', title: event.quest.title, detail: `+${event.xpGained} Proof` });
           void refresh(playerId);
           return;
         case 'levelup':
           if (event.playerId !== playerId) return;
-          setOverlay({ id: Date.now(), tone: 'gold', header: '[LEVEL UP]', title: `Rank ${event.toRank}`, detail: `Level ${event.level}` });
+          setOverlay({ id: Date.now(), tone: 'gold', header: '[ASCENSION]', title: `Rank ${event.toRank}`, detail: `Level ${event.level}` });
           void refresh(playerId);
           return;
         case 'penalty':
           if (event.playerId !== playerId) return;
-          setOverlay({ id: Date.now(), tone: 'red', header: '[PENALTY ZONE]', title: 'Quest failed', detail: event.reason });
+          setOverlay({ id: Date.now(), tone: 'red', header: '[THE RECKONING]', title: 'Vow broken', detail: event.reason });
           void refresh(playerId);
           return;
         case 'voice':
@@ -177,14 +177,14 @@ export function HunterClient() {
     <MotionConfig reducedMotion="user">
       <main className="min-h-dvh bg-[#05070D] px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-10 text-white">
         <header className="flex items-center justify-between font-mono text-xs tracking-[0.2em]">
-          <span className="text-[#38BDF8]">[SYSTEM]</span>
+          <span className="text-[#38BDF8]">[IRIS]</span>
           <span className={isConnected ? 'text-[#38BDF8]' : 'text-[#EF4444]'}>{isConnected ? '● ONLINE' : '○ RECONNECTING'}</span>
         </header>
 
         {!playerId ? (
           <form action={handleJoin} className="mt-16 space-y-4">
-            <h1 className="font-mono text-sm tracking-[0.3em] text-[#38BDF8]">[PLAYER REGISTRATION]</h1>
-            <label className="block text-lg text-white/80" htmlFor="name">Name, hunter.</label>
+            <h1 className="font-mono text-sm tracking-[0.3em] text-[#38BDF8]">[SWEAR THE OATH]</h1>
+            <label className="block text-lg text-white/80" htmlFor="name">Your name. Iris will remember it.</label>
             <input id="name" name="name" required maxLength={40} autoComplete="nickname"
               className="w-full rounded-xl border border-[#38BDF8]/50 bg-white/5 px-4 py-4 text-2xl text-white outline-none focus:border-[#38BDF8]" />
             <button type="submit" disabled={isBusy} className="w-full rounded-xl bg-[#38BDF8] py-4 font-mono text-lg font-bold tracking-widest text-[#05070D] disabled:opacity-50">
@@ -193,21 +193,21 @@ export function HunterClient() {
           </form>
         ) : (
           <div className="mt-6 space-y-5">
-            <section aria-label="Player" className="flex items-end justify-between">
+            <section aria-label="Profile" className="flex items-end justify-between">
               <div>
-                <p className="font-mono text-xs tracking-[0.25em] text-white/50">PLAYER</p>
+                <p className="font-mono text-xs tracking-[0.25em] text-white/50">SWORN</p>
                 <p className="text-3xl font-bold">{player?.name ?? '…'}</p>
               </div>
               <div className="text-right">
                 <p className="font-mono text-5xl font-bold text-[#FBBF24] drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]">{player?.rank ?? '-'}</p>
-                <p className="font-mono text-xs text-white/60">LV {player?.level ?? '-'} · {player?.xp ?? 0} XP</p>
+                <p className="font-mono text-xs text-white/60">LV {player?.level ?? '-'} · {player?.xp ?? 0} Proof</p>
               </div>
             </section>
 
             {!isStreaming ? (
               <button type="button" onClick={() => void motionSender.start()}
                 className="w-full rounded-2xl border-2 border-[#38BDF8] bg-[#38BDF8]/15 py-8 font-mono text-4xl font-bold tracking-[0.4em] text-[#38BDF8] shadow-[0_0_40px_rgba(56,189,248,0.35)] active:scale-[0.98]">
-                AWAKEN
+                BEGIN
               </button>
             ) : (
               <button type="button" onClick={motionSender.stop} className="w-full rounded-xl border border-white/20 py-3 font-mono text-sm tracking-widest text-white/60">

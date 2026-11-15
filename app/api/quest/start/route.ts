@@ -21,7 +21,7 @@ const NewQuestSchema = z
   })
   // XP is fixed per type × difficulty, so a custom target may not undercut the easy one.
   .refine((b) => b.target === undefined || b.target >= QUEST_RULES[b.type].target.easy, {
-    message: 'target is below the easy target for this quest type',
+    message: 'target is below the easy target for this vow type',
     path: ['target'],
   });
 

@@ -111,7 +111,7 @@ export function rowToPlayer(row: PlayerRow): Player | null {
   const parsed = PlayerSchema.safeParse({
     id: row.id,
     name: row.name ?? row.id,
-    rank: row.rank ?? 'E',
+    rank: row.rank === 'S' ? 'A' : (row.rank ?? 'E'), // S was retired; A is the top rank
     level: row.level ?? 1,
     xp: row.xp ?? 0,
     stats: { ...emptyStats(), ...(row.stats ?? {}) },

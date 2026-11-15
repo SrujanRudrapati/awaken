@@ -23,12 +23,12 @@ const DesignSchema = z.object({
 const SYSTEM = `You design a person's daily training quests for a fitness/discipline game.
 Choose ${MIN_DAILY}-${MAX_DAILY} quests. Use ONLY these types: ${DESIGNABLE_TYPES.join(', ')}.
 Difficulty is one of: easy, normal, hard. No duplicate types. Mix body and mind.
-Favor the player's weakest stats. Respond with JSON: {"quests":[{"type":"...","difficulty":"..."}]}`;
+Favor the person's weakest stats. Respond with JSON: {"quests":[{"type":"...","difficulty":"..."}]}`;
 
 function describe(player: Player): string {
   const stats = Object.entries(player.stats).map(([s, v]) => `${s} ${v}`).join(', ');
   const catalog = DESIGNABLE_TYPES.map((t) => `${t} (trains ${QUEST_RULES[t].stat})`).join(', ');
-  return `Player rank ${player.rank}, level ${player.level}, stats: ${stats}.${player.penalty ? ' Currently in the Penalty Zone.' : ''}\nQuest catalog: ${catalog}`;
+  return `Rank ${player.rank}, level ${player.level}, stats: ${stats}.${player.penalty ? ' Currently in the Reckoning.' : ''}\nQuest catalog: ${catalog}`;
 }
 
 /** Keeps only valid, unique, designable templates; null if too few survive. */
@@ -46,7 +46,7 @@ export function validateDesign(raw: z.infer<typeof DesignSchema> | null): QuestT
 }
 
 /** What the designer asks Supermemory before planning a player's day. */
-export const DESIGNER_RECALL_QUERY = "player's goals, failed or skipped quests, weakest stats, favorite quest types";
+export const DESIGNER_RECALL_QUERY = 'goals, broken or skipped vows, weakest stats, favorite vow types';
 
 export function recallForDesigner(player: Player): Promise<string | null> {
   return recall(player.id, DESIGNER_RECALL_QUERY);
@@ -60,7 +60,7 @@ export interface DesignerOptions {
 export function createGeminiDesigner(options: DesignerOptions = {}): QuestDesigner {
   return async (player) => {
     const extra = (await options.context?.(player).catch(() => null)) ?? null;
-    const prompt = extra ? `${describe(player)}\nWhat the System remembers: ${extra}` : describe(player);
+    const prompt = extra ? `${describe(player)}\nWhat Iris remembers: ${extra}` : describe(player);
     return validateDesign(await geminiJson({ system: SYSTEM, prompt }, DesignSchema)) ?? DAILY_TEMPLATES;
   };
 }

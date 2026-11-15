@@ -4,9 +4,8 @@
  */
 import type { Difficulty, QuestType, Rank, Stat } from '../lib/schemas';
 
-/** Minimum total XP for each rank (E0 D100 C300 B700 A1500 S3000). */
+/** Minimum total XP for each rank (E0 D100 C300 B700 A1500); A is the top rank. */
 export const RANK_THRESHOLDS: readonly (readonly [Rank, number])[] = [
-  ['S', 3000],
   ['A', 1500],
   ['B', 700],
   ['C', 300],
@@ -16,7 +15,7 @@ export const RANK_THRESHOLDS: readonly (readonly [Rank, number])[] = [
 
 export const XP_PER_LEVEL = 50;
 
-/** XP still needed to reach the next rank (0 at S). Used by demo mode's guaranteed first rank-up. */
+/** XP still needed to reach the next rank (0 at A). Used by demo mode's guaranteed first rank-up. */
 export function demoRankUpXp(xp: number): number {
   const next = [...RANK_THRESHOLDS].reverse().find(([, min]) => min > xp);
   return next ? next[1] - xp : 0;
@@ -32,7 +31,7 @@ export function levelForXp(xp: number): number {
 
 export const DIFFICULTY_MULTIPLIER: Record<Difficulty, number> = { easy: 1, normal: 1.5, hard: 2 };
 
-/** Harder retry after a failure (penalty quest). */
+/** Harder retry after a failure (Reckoning vow). */
 export const HARDER: Record<Difficulty, Difficulty> = { easy: 'normal', normal: 'hard', hard: 'hard' };
 
 interface QuestRule {
@@ -58,8 +57,8 @@ export const QUEST_RULES: Record<QuestType, QuestRule> = {
   workout: { stat: 'STR', baseXp: 35, target: { easy: 15, normal: 30, hard: 60 }, unit: 'minutes', title: 'Workout' },
   sleep: { stat: 'DISCIPLINE', baseXp: 30, target: { easy: 6, normal: 7, hard: 8 }, unit: 'hours', title: 'Sleep' },
   photo: { stat: 'DISCIPLINE', baseXp: 20, target: { easy: 1, normal: 1, hard: 1 }, unit: 'photo', title: 'Photo proof' },
-  gate: { stat: 'CHA', baseXp: 60, target: { easy: 1, normal: 1, hard: 1 }, unit: 'gate', title: 'Clear a Gate' },
-  quiz: { stat: 'INT', baseXp: 30, target: { easy: 1, normal: 1, hard: 1 }, unit: 'quiz', title: 'Boss Quiz' },
+  gate: { stat: 'CHA', baseXp: 60, target: { easy: 1, normal: 1, hard: 1 }, unit: 'field vow', title: 'Field Vow' },
+  quiz: { stat: 'INT', baseXp: 30, target: { easy: 1, normal: 1, hard: 1 }, unit: 'trial', title: 'Mind Trial' },
 };
 
 export function xpFor(type: QuestType, difficulty: Difficulty): number {
@@ -76,7 +75,7 @@ export interface QuestTemplate {
   difficulty: Difficulty;
 }
 
-/** Fallback daily drop (the Gemini designer replaces this when available). */
+/** Fallback daily vows (the Gemini designer replaces this when available). */
 export const DAILY_TEMPLATES: readonly QuestTemplate[] = [
   { type: 'pushup', difficulty: 'normal' },
   { type: 'squat', difficulty: 'normal' },

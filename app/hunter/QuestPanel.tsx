@@ -28,7 +28,7 @@ export function QuestPanel({ quest, isFocused, rejection, isBusy, onFocus, onSta
   if (!quest) {
     return (
       <section className={panel} aria-labelledby="no-quest">
-        <p id="no-quest" className="font-mono text-sm tracking-[0.25em] text-[#38BDF8]">[NO ACTIVE QUEST]</p>
+        <p id="no-quest" className="font-mono text-sm tracking-[0.25em] text-[#38BDF8]">[NO ACTIVE VOW]</p>
         <p className="mt-2 text-white/70">Choose training. The armband will count your reps.</p>
         <div className="mt-4 grid grid-cols-2 gap-3">
           {PHONE_QUEST_TYPES.map((type) => (
@@ -43,7 +43,7 @@ export function QuestPanel({ quest, isFocused, rejection, isBusy, onFocus, onSta
 
   const isEmergency = quest.kind === 'emergency';
   const pct = Math.min(100, Math.round((quest.progress / quest.target) * 100));
-  const header = isEmergency ? '[EMERGENCY QUEST]' : quest.kind === 'penalty' ? '[PENALTY QUEST]' : quest.kind === 'daily' ? '[DAILY QUEST]' : '[QUEST]';
+  const header = isEmergency ? '[URGENT VOW]' : quest.kind === 'penalty' ? '[RECKONING VOW]' : quest.kind === 'daily' ? "[TODAY'S VOW]" : '[VOW]';
   const accent = isEmergency || quest.kind === 'penalty' ? 'text-[#EF4444]' : 'text-[#38BDF8]';
 
   return (

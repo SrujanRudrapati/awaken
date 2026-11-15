@@ -75,8 +75,8 @@ describe('photo proof', () => {
 
   it('rejects bad input before calling Gemini', async () => {
     const sensorQuest = (await startQuest('p1', { type: 'squat' })).id;
-    await expect(submitPhotoProof(jpeg('p1', sensorQuest))).rejects.toThrow(/not a photo quest/);
-    await expect(submitPhotoProof(jpeg('someone-else', questId))).rejects.toThrow(/No quest/);
+    await expect(submitPhotoProof(jpeg('p1', sensorQuest))).rejects.toThrow(/not a photo vow/);
+    await expect(submitPhotoProof(jpeg('someone-else', questId))).rejects.toThrow(/No vow/);
     await expect(submitPhotoProof({ ...jpeg('p1', questId), mimeType: 'image/gif' })).rejects.toThrow(/Unsupported/);
     await expect(submitPhotoProof({ ...jpeg('p1', questId), bytes: new Uint8Array() })).rejects.toThrow(/Empty/);
     expect(geminiJson).not.toHaveBeenCalled();

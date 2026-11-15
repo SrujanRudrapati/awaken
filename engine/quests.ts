@@ -125,7 +125,7 @@ export async function getPlayer(id: string): Promise<Player | null> {
 /** Resolves the player, then returns the freshest in-memory copy (avoids lost updates across awaits). */
 async function requirePlayer(id: string): Promise<Player> {
   const player = await getPlayer(id);
-  if (!player) throw new QuestError(`No player ${id}`, 404);
+  if (!player) throw new QuestError(`No one found with id ${id}`, 404);
   return cachedPlayer(id) ?? player;
 }
 
@@ -192,8 +192,8 @@ export function listQuests(playerId: string): Quest[] {
 
 function requireActiveQuest(playerId: string, questId: string): Quest {
   const quest = getQuest(questId);
-  if (!quest || quest.playerId !== playerId) throw new QuestError(`No quest ${questId} for ${playerId}`, 404);
-  if (quest.status !== 'active') throw new QuestError(`Quest ${questId} is already ${quest.status}`, 409);
+  if (!quest || quest.playerId !== playerId) throw new QuestError(`No vow ${questId} for ${playerId}`, 404);
+  if (quest.status !== 'active') throw new QuestError(`Vow ${questId} is already ${quest.status}`, 409);
   return quest;
 }
 
@@ -289,7 +289,7 @@ export async function startQuest(playerId: string, input: NewQuestInput | { ques
   if ('questId' in input) {
     const quest = requireActiveQuest(playerId, input.questId);
     if (isExpired(quest) && !getState().timers.has(quest.id)) {
-      throw new QuestError(`Quest ${quest.id} is past its deadline`, 409);
+      throw new QuestError(`Vow ${quest.id} is past its deadline`, 409);
     }
     return launch(quest);
   }
@@ -327,7 +327,7 @@ async function awardQuest(playerId: string, questId: string): Promise<Completion
   db.logEvent({ playerId, kind: 'xp', stat: quest.stat, value: quest.xp, source: 'engine' });
   db.logEvent({ playerId, kind: 'quest.complete', stat: quest.stat, value: 1, source: 'engine' });
   publish({ type: 'quest.complete', quest, xpGained: quest.xp });
-  notify({ title: '[QUEST COMPLETE]', message: `${quest.title} · +${quest.xp} XP`, tags: ['white_check_mark'] });
+  notify({ title: '[VOW KEPT]', message: `${quest.title} · +${quest.xp} Proof`, tags: ['white_check_mark'] });
 
   const leveledUp = updated.level > player.level;
   if (leveledUp) announceLevelUp(player, updated);
@@ -343,7 +343,7 @@ export async function setQuestProgress(playerId: string, questId: string, progre
   await requirePlayer(playerId);
   const active = requireActiveQuest(playerId, questId);
   if (hasSensorVerifier(active.type)) {
-    throw new QuestError(`Quest ${questId} is a sensor quest; only the sensors can count it`, 409);
+    throw new QuestError(`Vow ${questId} is measured by sensors; only the sensors can count it`, 409);
   }
   if (progress <= active.progress) return active;
   const quest = storeQuest({ ...active, progress: Math.min(progress, active.target) });
@@ -358,7 +358,7 @@ export async function setQuestProgress(playerId: string, questId: string, progre
 export async function completeQuest(playerId: string, questId: string): Promise<CompletionResult> {
   const quest = getQuest(questId);
   if (quest && hasSensorVerifier(quest.type)) {
-    throw new QuestError(`Quest ${questId} is a sensor quest; only the sensors can complete it`, 409);
+    throw new QuestError(`Vow ${questId} is measured by sensors; only the sensors can complete it`, 409);
   }
   return awardQuest(playerId, questId);
 }
@@ -370,10 +370,10 @@ function hasActivePenaltyQuest(playerId: string): boolean {
 function announceLevelUp(before: Player, after: Player): void {
   publish({ type: 'levelup', playerId: after.id, fromRank: before.rank, toRank: after.rank, level: after.level });
   db.logEvent({ playerId: after.id, kind: 'levelup', value: after.level, source: 'engine' });
-  void sendAll(['BUZZ:chime', 'SEG:LVUP']);
+  void sendAll(['BUZZ:chime', 'SEG:ASCN']);
   notify({
-    title: '[LEVEL UP]',
-    message: `${after.name} reached level ${after.level} · Rank ${after.rank}`,
+    title: '[ASCENSION]',
+    message: `${after.name} ascends to level ${after.level} · Rank ${after.rank}`,
     priority: 'high',
     tags: ['zap'],
   });
@@ -393,7 +393,7 @@ function buildPenaltyQuest(failed: Quest): Quest {
     difficulty: HARDER[difficulty],
     target: isDefaultTarget && canStepUp ? undefined : Math.ceil(failed.target * PENALTY_TARGET_FACTOR),
     kind: 'penalty',
-    title: `[PENALTY] ${QUEST_RULES[failed.type].title}`,
+    title: `[RECKONING] ${QUEST_RULES[failed.type].title}`,
   });
 }
 
@@ -428,7 +428,7 @@ export async function failQuest(
   publish({ type: 'penalty', playerId, questId, reason });
   if (!options.quiet) {
     void sendAll(['BUZZ:alarm', 'SEG:FAIL']);
-    notify({ title: '[PENALTY ZONE]', message: reason, priority: 'urgent', tags: ['warning'] });
+    notify({ title: '[THE RECKONING]', message: reason, priority: 'urgent', tags: ['warning'] });
   }
 
   if (options.spawnPenalty === false) return { quest, penaltyQuest: null };
@@ -459,7 +459,7 @@ function onSensorComplete(quest: Quest): void {
 
 /** After a Phone Jail session: a quiz quest proves the focus was real (Phase 9 quiz agent grades it). */
 function issueFocusQuiz(playerId: string): void {
-  const quiz = storeQuest(buildQuest(playerId, { type: 'quiz', title: '[FOCUS QUIZ] Prove what you studied', kind: 'manual' }));
+  const quiz = storeQuest(buildQuest(playerId, { type: 'quiz', title: '[FOCUS TRIAL] Prove what you studied', kind: 'manual' }));
   publish({ type: 'quest.update', quest: quiz });
 }
 
@@ -503,14 +503,14 @@ export async function emergencyQuest(playerId: string, type: QuestType = 'pushup
     type,
     difficulty: 'hard',
     target: EMERGENCY_TARGET,
-    title: `[EMERGENCY] ${EMERGENCY_TARGET} ${QUEST_RULES[type].title} in ${EMERGENCY_SECONDS} s`,
+    title: `[URGENT] ${EMERGENCY_TARGET} ${QUEST_RULES[type].title} in ${EMERGENCY_SECONDS} s`,
     deadline,
     kind: 'emergency',
   });
   const xp = isDemoMode() && brandNew ? Math.max(built.xp, demoRankUpXp(player.xp)) : built.xp;
   const quest = launch(storeQuest({ ...built, xp }));
   void sendAll(['BUZZ:alarm', segNumber(EMERGENCY_SECONDS)]);
-  notify({ title: '[EMERGENCY QUEST]', message: quest.title, priority: 'urgent', tags: ['rotating_light'] });
+  notify({ title: '[URGENT VOW]', message: quest.title, priority: 'urgent', tags: ['rotating_light'] });
 
   const timer = setInterval(() => {
     const secondsLeft = Math.ceil((deadline.getTime() - Date.now()) / 1_000);
@@ -524,7 +524,7 @@ export async function emergencyQuest(playerId: string, type: QuestType = 'pushup
       return;
     }
     clearInterval(timer);
-    failQuest(playerId, quest.id, `Emergency quest failed: ${EMERGENCY_TARGET} reps not done in ${EMERGENCY_SECONDS} s`).catch(
+    failQuest(playerId, quest.id, `Urgent vow broken: ${EMERGENCY_TARGET} reps not done in ${EMERGENCY_SECONDS} s`).catch(
       () => {}, // completed in the same instant — nothing to fail
     );
   }, COUNTDOWN_TICK_MS);
@@ -557,8 +557,8 @@ export async function sweepExpired(now = new Date()): Promise<number> {
   }
   for (const failed of failedByPlayer.values()) {
     notify({
-      title: '[PENALTY ZONE]',
-      message: `Missed: ${failed.map((q) => q.title).join(', ')}. A penalty quest has been issued.`,
+      title: '[THE RECKONING]',
+      message: `Broken: ${failed.map((q) => q.title).join(', ')}. A Reckoning vow has been issued.`,
       priority: 'urgent',
       tags: ['warning'],
     });
@@ -598,7 +598,7 @@ export async function dailyDrop(now = new Date(), design: QuestDesigner = templa
   }
   const titles = [...new Set(Object.values(dropped).flat().map((q) => q.title))];
   if (titles.length > 0) {
-    notify({ title: '[DAILY QUEST HAS ARRIVED]', message: titles.join('\n'), priority: 'high', tags: ['scroll'] });
+    notify({ title: "[TODAY'S VOWS]", message: titles.join('\n'), priority: 'high', tags: ['scroll'] });
   }
   return dropped;
 }
