@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { routeReading } from '../../../engine/router';
+import { fail, ok } from '../../../lib/api-response';
 import { publish } from '../../../lib/bus';
 import { ReadingSchema } from '../../../lib/schemas';
 
@@ -25,10 +26,6 @@ function shouldPublish(now: number): boolean {
   if (last !== undefined && now - last < PUBLISH_INTERVAL_MS) return false;
   throttle.__awakenLastReadingPublish = now;
   return true;
-}
-
-function fail(status: number, error: string): Response {
-  return Response.json({ success: false, data: null, error }, { status });
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -60,5 +57,5 @@ export async function POST(request: Request): Promise<Response> {
     publish({ type: 'reading', reading: readings[readings.length - 1] });
   }
 
-  return Response.json({ success: true, data: { accepted: readings.length }, error: null });
+  return ok({ accepted: readings.length });
 }
