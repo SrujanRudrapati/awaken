@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Reading } from '../../lib/schemas';
-import { FLUSH_INTERVAL_MS, readingsUrl, shouldKeep, takeBatch, toReading } from './motion';
+import { FLUSH_INTERVAL_MS, oneAtATime, readingsUrl, shouldKeep, takeBatch, toReading } from './motion';
 
 export type MotionStatus = 'idle' | 'requesting' | 'streaming' | 'denied' | 'unsupported' | 'offline';
 
@@ -41,7 +41,7 @@ export function useMotionSender(
   const lastKept = useRef<number | null>(null);
   const cleanup = useRef<() => void>(() => {});
 
-  const flush = useCallback(async () => {
+  const send = useCallback(async () => {
     const { batch, rest } = takeBatch(queue.current);
     if (batch.length === 0) return;
     queue.current = rest;
@@ -58,6 +58,12 @@ export function useMotionSender(
       setStatus('offline'); // keep sampling; the next flush retries with fresh data
     }
   }, []);
+  // One POST in flight at a time, so batches reach the server in order.
+  const guarded = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    guarded.current = oneAtATime(send);
+  }, [send]);
+  const flush = useCallback(() => guarded.current(), []);
 
   const stop = useCallback(() => {
     cleanup.current();
