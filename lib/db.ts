@@ -248,6 +248,9 @@ export async function migrate(): Promise<string[] | null> {
        player_id text NOT NULL, start_ts timestamptz NOT NULL, end_ts timestamptz NOT NULL, stage text NOT NULL,
        PRIMARY KEY (player_id, start_ts, end_ts, stage))`,
     'ALTER TABLE players ADD COLUMN IF NOT EXISTS proof jsonb',
+    `CREATE TABLE IF NOT EXISTS wallets (
+       player_id text PRIMARY KEY, balance integer NOT NULL DEFAULT 0, earned integer NOT NULL DEFAULT 0,
+       shields integer NOT NULL DEFAULT 0, cosmetics jsonb NOT NULL DEFAULT '[]', last_halve_at timestamptz)`,
     `CREATE TABLE IF NOT EXISTS calibrations (
        player_id text NOT NULL, ts timestamptz NOT NULL, result jsonb NOT NULL, PRIMARY KEY (player_id, ts))`,
   ];
@@ -285,6 +288,43 @@ export async function listSleepSamples(playerId: string, since: Date): Promise<S
     [playerId, since],
   );
   return rows === null ? null : rows.map((r) => ({ start: new Date(r.start_ts), end: new Date(r.end_ts), stage: r.stage }));
+}
+
+// ── Shards wallets ──────────────────────────────────────────────────────────
+
+export interface WalletRow {
+  playerId: string;
+  balance: number;
+  earned: number;
+  shields: number;
+  cosmetics: string[];
+  lastHalveAt: string | null;
+}
+
+export async function getWallet(playerId: string): Promise<WalletRow | null> {
+  const rows = await query<{ balance: number; earned: number; shields: number; cosmetics: string[] | null; last_halve_at: Date | null }>(
+    'SELECT balance, earned, shields, cosmetics, last_halve_at FROM wallets WHERE player_id = $1',
+    [playerId],
+  );
+  const row = rows?.[0];
+  if (!row) return null;
+  return {
+    playerId,
+    balance: row.balance,
+    earned: row.earned,
+    shields: row.shields,
+    cosmetics: Array.isArray(row.cosmetics) ? row.cosmetics : [],
+    lastHalveAt: row.last_halve_at ? new Date(row.last_halve_at).toISOString() : null,
+  };
+}
+
+export async function upsertWallet(wallet: WalletRow): Promise<void> {
+  await query(
+    `INSERT INTO wallets (player_id, balance, earned, shields, cosmetics, last_halve_at) VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (player_id) DO UPDATE SET balance = EXCLUDED.balance, earned = EXCLUDED.earned, shields = EXCLUDED.shields,
+       cosmetics = EXCLUDED.cosmetics, last_halve_at = EXCLUDED.last_halve_at`,
+    [wallet.playerId, wallet.balance, wallet.earned, wallet.shields, JSON.stringify(wallet.cosmetics), wallet.lastHalveAt],
+  );
 }
 
 // ── Calibration (baselines) ─────────────────────────────────────────────────

@@ -158,7 +158,8 @@ describe('db', () => {
     const applied = await migrate();
     expect(applied?.[0]).toBe('ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb');
     expect(applied?.[2]).toBe('ALTER TABLE players ADD COLUMN IF NOT EXISTS proof jsonb');
-    expect(applied?.[3]).toMatch(/CREATE TABLE IF NOT EXISTS calibrations/);
+    expect(applied?.[3]).toMatch(/CREATE TABLE IF NOT EXISTS wallets/);
+    expect(applied?.[4]).toMatch(/CREATE TABLE IF NOT EXISTS calibrations/);
     expect(applied?.[1]).toMatch(/CREATE TABLE IF NOT EXISTS sleep_samples[\s\S]*PRIMARY KEY \(player_id, start_ts, end_ts, stage\)/);
 
     delete process.env.TIGER_DATABASE_URL;

@@ -377,3 +377,10 @@ Tiger table `calibrations` (applied 2026-11-14). Re-calibration every 30 days (+
       time (20 s in DEMO_MODE) → display `QUIZ` + chime → `POST /api/read/trial` → 3 questions, 30 s each →
       `POST /api/read/answer {"answers":[i,i,i]}` → ≥ 2 right verifies the vow (Mind Proof). Gemini offline → "try again", never a free pass.
 
+---
+
+## Phase G — Constellations + Shards
+
+Tiger table `wallets` (applied 2026-11-15). Verified live: `GET /api/shards/demo-sleep` (empty wallet), `GET /api/constellation/demo-sleep`
+→ "Lyra", 16 people. Nothing manual — earn Shards by keeping vows, then `POST /api/shards/spend`.
+

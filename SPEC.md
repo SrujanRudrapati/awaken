@@ -50,6 +50,7 @@ System → **Iris, the Arbiter** · quest → **vow** · XP → **Proof** · lev
 Penalty Zone → **the Reckoning** · league → **Constellation** · gold → **Shards** · gate → **Field Vow** ·
 stats STR/INT/FOCUS/VIT/DISCIPLINE/CHA → **Body/Mind/Focus/Vitality/Discipline/Presence**. Ranks **E → D → C → B → A** (A is top; no S).
 **Rank = Power** (`lib/power.ts`): Power = Σ √(Proof per stat) + 3 × √(weakest stat); bands E 0 · D 30 · C 70 · B 140 · A 250. Level still = Proof/50 (Ascension). Rep-vow Proof scales to the Calibration baseline (0.5×–2×). Leaderboard = Proof earned in the last 7 days, verified only (DEMO_MODE Proof excluded unless `?includeDemo=1`).
+**Constellations** (`engine/constellations.ts`): groups of ~30 by Power, ordered by weekly Proof (`GET /api/constellation/:id`). **Shards** (`engine/shards.ts`): earn-only — 1 per 10 Proof kept, +20 per Ascension; spend on streak shield 200 (max 3; absorbs one midnight's misses), Reckoning halve 300 (1/week), bonus vow 150 (1.5× Proof), cosmetics 100–500.
 Never user-visible: player, hunter, awaken, dungeon, shadow, arise (`lib/brand.test.ts` enforces; model lines with them are replaced by canned ones).
 Where this document still says System/quest/XP/Penalty Zone, read the OATH term.
 

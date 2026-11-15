@@ -14,6 +14,7 @@ import { send, sendAll } from '../lib/device';
 import { getBaselines } from '../lib/baselines';
 import { isDemoPlayerId } from '../lib/demo';
 import { notify } from '../lib/notify';
+import { consumeShield, earnShards, loadWallet } from '../lib/wallet';
 import { power, proofOf, proofScale, rankForPower, spreadProof, spreadProofToNextRank, type StatProof } from '../lib/power';
 import { StatSchema, type Difficulty, type Player, type Quest, type QuestKind, type QuestType, type Stat } from '../lib/schemas';
 import { forgetLedger, passedBy, recordProof, weeklyProof } from './ledger';
@@ -52,6 +53,11 @@ const DB_LOOKUP_TIMEOUT_MS = 500;
 export const DEMO_JAIL_SECONDS = 20;
 /** A failed hard / custom-target quest comes back this much bigger. */
 const PENALTY_TARGET_FACTOR = 1.5;
+/** Shards: 1 per 10 Proof on every vow kept, +20 per Ascension (earn-only currency). */
+const SHARDS_PER_PROOF = 0.1;
+export const ASCENSION_SHARDS = 20;
+/** A bought bonus vow pays this much more Proof. */
+export const BONUS_VOW_FACTOR = 1.5;
 
 /** Error with an HTTP status, so routes can map engine failures to responses. */
 export class QuestError extends Error {
@@ -337,7 +343,9 @@ export async function applyCalibration(playerId: string, seed: { stats: Player['
 
 /** Bonus Proof outside a vow (e.g. re-calibration). Announces Ascension / rank changes it causes. */
 export async function grantProof(playerId: string, amount: number, reason: string, stat: Stat = 'DISCIPLINE'): Promise<Player> {
-  const player = await requirePlayer(playerId);
+  await requirePlayer(playerId);
+  await loadWallet(playerId);
+  const player = cachedPlayer(playerId) as Player;
   return creditProof(player, stat, Math.max(0, Math.round(amount)), reason).player;
 }
 
@@ -371,8 +379,35 @@ function creditProof(
     publish({ type: 'rank.up', playerId: player.id, fromRank: player.rank, toRank: updated.rank, power: power(proof) });
   }
   const leveledUp = updated.level > player.level;
-  if (leveledUp) announceLevelUp(player, updated);
+  if (leveledUp) {
+    earnShards(player.id, ASCENSION_SHARDS);
+    announceLevelUp(player, updated);
+  }
   return { player: updated, leveledUp };
+}
+
+// ── Shard purchases (engine side) ───────────────────────────────────────────
+
+/** Changes an active vow's target (e.g. halving a Reckoning vow); sensors keep counting with the new target. */
+export function retargetQuest(playerId: string, questId: string, target: number): Quest {
+  const active = requireActiveQuest(playerId, questId);
+  const wasCounting = getActiveQuest(playerId)?.id === questId;
+  stopQuest(active);
+  const updated = storeQuest({ ...withLiveProgress(active), target: Math.max(1, Math.round(target)) });
+  if (wasCounting) activate(updated);
+  publish({ type: 'quest.update', quest: updated });
+  return updated;
+}
+
+/** A bought extra vow: a type not already active today, worth BONUS_VOW_FACTOR × Proof. */
+export async function addBonusVow(playerId: string): Promise<Quest> {
+  await requirePlayer(playerId);
+  const busy = new Set(listQuests(playerId).filter((q) => q.status === 'active').map((q) => q.type));
+  const template = DAILY_TEMPLATES.find((t) => !busy.has(t.type)) ?? DAILY_TEMPLATES[0];
+  const built = buildQuest(playerId, { ...template, kind: 'manual' });
+  const quest = storeQuest({ ...built, title: `[BONUS] ${built.title}`, xp: Math.round(built.xp * BONUS_VOW_FACTOR) });
+  publish({ type: 'quest.update', quest });
+  return quest;
 }
 
 // ── Demo seeding ────────────────────────────────────────────────────────────
@@ -431,7 +466,8 @@ async function awardQuest(playerId: string, questId: string, options: CompleteOp
   await requirePlayer(playerId);
   requireActiveQuest(playerId, questId);
   const baselines = await getBaselines(playerId);
-  const active = requireActiveQuest(playerId, questId); // re-check after the await
+  await loadWallet(playerId);
+  const active = requireActiveQuest(playerId, questId); // re-check after the awaits
   const player = cachedPlayer(playerId) as Player; // re-read after the awaits: no lost updates
   stopQuest(active);
   // Emergency rewards are fixed (DEMO_MODE's first one guarantees a rank-up); others scale to the baseline.
@@ -450,6 +486,7 @@ async function awardQuest(playerId: string, questId: string, options: CompleteOp
     penalty: penaltyCleared ? false : player.penalty,
   });
 
+  earnShards(playerId, Math.max(1, Math.round(quest.xp * SHARDS_PER_PROOF)));
   if (!leveledUp) void sendAll(['BUZZ:chime', segNumber(quest.progress)]);
   return { quest, player: updated, leveledUp };
 }
@@ -688,7 +725,16 @@ export async function sweepExpired(now = new Date()): Promise<number> {
     (q) => q.status === 'active' && isExpired(q, now) && !getState().timers.has(q.id),
   );
   const failedByPlayer = new Map<string, Quest[]>();
+  const shielded = new Set<string>();
+  for (const playerId of new Set(expired.map((q) => q.playerId))) {
+    await loadWallet(playerId);
+    if (consumeShield(playerId)) shielded.add(playerId);
+  }
   for (const quest of expired) {
+    if (shielded.has(quest.playerId)) {
+      cancelQuest(quest.playerId, quest.id); // streak shield: missed, but no Reckoning
+      continue;
+    }
     const result = await failQuest(quest.playerId, quest.id, `Missed deadline: ${quest.title}`, {
       quiet: true,
       spawnPenalty: false,
@@ -707,6 +753,10 @@ export async function sweepExpired(now = new Date()): Promise<number> {
     publish({ type: 'quest.update', quest: penaltyQuest });
   }
   if (failedByPlayer.size > 0) void sendAll(['BUZZ:alarm', 'SEG:FAIL']);
+  for (const playerId of shielded) {
+    notify({ title: '[SHIELD USED]', message: 'A streak shield absorbed missed vows. No Reckoning this time.', tags: ['shield'] });
+    db.logEvent({ playerId, kind: 'shards.shield', value: 1, source: 'engine' });
+  }
   return expired.length;
 }
 
