@@ -272,7 +272,11 @@ Everything is gated on env vars; nothing breaks if a step is skipped. Put the va
   A random photo → `"passed":false` with a reason, quest stays active (retry allowed).
   In Tiger: `select kind, value, verified, detail from events where kind='photo.verdict' order by ts desc limit 3;`
   Without AWS: `"storage":"local"`, file under `/tmp/awaken-proofs/` (`PROOF_LOCAL_DIR` to change).
-- [ ] **Polly voice:** pick a neural voice (deep: `Matthew`, `Gregory`, `Stephen`; default `Matthew`) → `POLLY_VOICE=Gregory`.
+- [ ] **ElevenLabs voice (Iris, primary):** elevenlabs.io → API key + pick/clone a voice → `.env.local`:
+      `ELEVENLABS_API_KEY=...`, `ELEVENLABS_VOICE_ID=...` (optional `ELEVENLABS_MODEL`, default `eleven_v3`, which reads the
+      audio tags `[calm] [slowly] [whispers] [sighs] [serious] [dismissive] [exhales]`). Then `npm run voice:pregen`.
+      Chain: ElevenLabs → Polly (tags stripped) → browser speech. Every SSE event carries `irisMood`.
+- [ ] **Polly voice (fallback):** pick a neural voice (deep: `Matthew`, `Gregory`, `Stephen`; default `Matthew`) → `POLLY_VOICE=Gregory`.
       Then `npm run voice:pregen` → every canned line `ok`. Trigger a level-up → the `voice` event has
       `"audioUrl":"/api/voice/<hash>.mp3"`; open `localhost:3000<audioUrl>` → it plays.
       Cache dir `/tmp/awaken-voice` (`VOICE_CACHE_DIR`); re-run `voice:pregen` after changing the voice.

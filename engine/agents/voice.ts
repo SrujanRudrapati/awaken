@@ -6,12 +6,13 @@
  * Started once per process by startVoice() (the SSE route calls it). rep.rejected uses canned
  * lines only (it fires too often to spend a model call on).
  */
-import { speak as synthesize } from '../../lib/aws/polly';
 import { publish, subscribe } from '../../lib/bus';
 import { claude } from '../../lib/llm';
 import { recall } from '../../lib/memory';
+import { stripTags } from '../../lib/voice/tags';
+import { speak as synthesize } from '../../lib/voice/tts';
 import type { StreamEvent } from '../../lib/schemas';
-import { CANNED_LINES, VOICE_SYSTEM_PROMPT, sanitizeLine, type VoiceEventType } from './voicePersona';
+import { CANNED_LINES, VOICE_MOODS, VOICE_SYSTEM_PROMPT, sanitizeLine, type VoiceEventType } from './voicePersona';
 
 /** Collect events this long before speaking, so related events become one line. */
 export const VOICE_WINDOW_MS = 300;
@@ -100,9 +101,16 @@ async function speak(state: VoiceState, moment: Moment): Promise<void> {
             timeoutMs: VOICE_TIMEOUT_MS,
           }),
         );
-  const text = line ?? canned(state, moment.type);
-  const audioUrl = (await synthesize(text)) ?? undefined;
-  publish({ type: 'voice', text, eventType: moment.type, playerId: moment.playerId, audioUrl });
+  const tagged = line ?? canned(state, moment.type);
+  const audioUrl = (await synthesize(tagged)) ?? undefined; // ElevenLabs gets the tags; Polly/browser don't
+  publish({
+    type: 'voice',
+    text: stripTags(tagged),
+    eventType: moment.type,
+    playerId: moment.playerId,
+    audioUrl,
+    irisMood: VOICE_MOODS[moment.type],
+  });
 }
 
 function onEvent(state: VoiceState, event: StreamEvent): void {

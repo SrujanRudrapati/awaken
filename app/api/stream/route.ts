@@ -1,6 +1,6 @@
 /**
  * GET /api/stream — Server-Sent Events. Each bus event is written as
- * `data: <StreamEvent JSON>\n\n`; a comment heartbeat keeps proxies from idling out.
+ * `data: <StreamEvent JSON + irisMood>\n\n`; a comment heartbeat keeps proxies from idling out.
  *
  * Note: next.config has `cacheComponents: true`, which forbids `export const runtime`
  * and replaces `dynamic = 'force-dynamic'` — `await connection()` keeps this at request time.
@@ -8,12 +8,13 @@
 import { connection } from 'next/server';
 import { startVoice } from '../../../engine/agents/voice';
 import { subscribe } from '../../../lib/bus';
+import { withMood } from '../../../lib/irisMood';
 
 const HEARTBEAT_MS = 15_000;
 
 export async function GET(request: Request): Promise<Response> {
   await connection();
-  startVoice(); // the System speaks while someone is watching
+  startVoice(); // Iris speaks while someone is watching
 
   const encoder = new TextEncoder();
   let cleanup: () => void = () => {};
@@ -31,7 +32,7 @@ export async function GET(request: Request): Promise<Response> {
         }
       };
 
-      const unsubscribe = subscribe((event) => write(`data: ${JSON.stringify(event)}\n\n`));
+      const unsubscribe = subscribe((event) => write(`data: ${JSON.stringify(withMood(event))}\n\n`));
       const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS);
 
       cleanup = () => {

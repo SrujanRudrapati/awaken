@@ -1,16 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../lib/llm', () => ({ claude: vi.fn() }));
-vi.mock('../../lib/aws/polly', () => ({ speak: vi.fn(async () => null) }));
+vi.mock('../../lib/voice/tts', () => ({ speak: vi.fn(async () => null) }));
 vi.mock('../../lib/memory', () => ({ recall: vi.fn(async () => null) }));
 
 import { publish, subscribe } from '../../lib/bus';
-import { speak } from '../../lib/aws/polly';
+import { speak } from '../../lib/voice/tts';
 import { claude } from '../../lib/llm';
 import { recall } from '../../lib/memory';
 import type { Quest, StreamEvent } from '../../lib/schemas';
 import { VOICE_WINDOW_MS, announceAwakening, startVoice, stopVoice } from './voice';
-import { CANNED_LINES, sanitizeLine } from './voicePersona';
+import { stripTags } from '../../lib/voice/tags';
+import { CANNED_LINES, VOICE_MOODS, sanitizeLine, sentenceCount } from './voicePersona';
 
 const quest = (over: Partial<Quest> = {}): Quest => ({
   id: 'q1', playerId: 'p1', stat: 'STR', title: 'Push-ups: 20 reps', type: 'pushup', target: 20, progress: 20,
@@ -43,7 +44,7 @@ describe('System voice', () => {
     publish({ type: 'levelup', playerId: 'p1', fromRank: 'E', toRank: 'D', level: 3 });
     await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
 
-    expect(voices).toEqual([{ type: 'voice', text: 'Rank D confirmed. You are no longer weak.', eventType: 'levelup', playerId: 'p1' }]);
+    expect(voices).toEqual([{ type: 'voice', text: 'Rank D confirmed. You are no longer weak.', eventType: 'levelup', playerId: 'p1', irisMood: 'proud' }]);
     expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('rank E → D');
   });
 
@@ -57,7 +58,7 @@ describe('System voice', () => {
     await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
 
     expect(voices).toHaveLength(2);
-    voices.forEach((v) => expect(CANNED_LINES.penalty).toContain(v.text));
+    voices.forEach((v) => expect(CANNED_LINES.penalty.map(stripTags)).toContain(v.text));
   });
 
   it('announces a new emergency once, ignores its progress updates', async () => {
@@ -91,19 +92,21 @@ describe('System voice', () => {
     await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
 
     expect(voices.map((v) => v.eventType)).toEqual(['quest.start']);
-    expect(CANNED_LINES['quest.start']).toContain(voices[0].text);
+    expect(CANNED_LINES['quest.start'].map(stripTags)).toContain(voices[0].text);
+    expect(voices[0].irisMood).toBe('watching');
   });
 
-  it('awakening speaks for a new player and carries the Polly audio URL when available', async () => {
-    vi.mocked(claude).mockResolvedValue('Oath recorded. Calibration begins. Try to impress me.');
+  it('Calibration greeting: display text without tags, tagged line to TTS, audio URL + mood on the event', async () => {
+    vi.mocked(claude).mockResolvedValue('[calm] Oath recorded. [dismissive] Try to impress me.');
     vi.mocked(speak).mockResolvedValueOnce(`/api/voice/${'a'.repeat(64)}.mp3`);
 
     announceAwakening('p9', 'Mina');
     await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
 
     expect(voices).toEqual([
-      { type: 'voice', eventType: 'awakening', playerId: 'p9', text: 'Oath recorded. Calibration begins. Try to impress me.', audioUrl: `/api/voice/${'a'.repeat(64)}.mp3` },
+      { type: 'voice', eventType: 'awakening', playerId: 'p9', text: 'Oath recorded. Try to impress me.', audioUrl: `/api/voice/${'a'.repeat(64)}.mp3`, irisMood: 'watching' },
     ]);
+    expect(vi.mocked(speak).mock.calls[0][0]).toBe('[calm] Oath recorded. [dismissive] Try to impress me.'); // tags go to TTS only
     expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('Mina');
   });
 
@@ -132,11 +135,18 @@ describe('sanitizeLine', () => {
   it('keeps one clean line of ≤ 15 words, drops quotes, markdown and exclamation', () => {
     expect(sanitizeLine('"**Rise, Oathbearer!**"\nsecond line')).toBe('Rise, Oathbearer.');
     expect(sanitizeLine('Arise, Player.')).toBeNull(); // old-brand words never reach the speakers
-    expect(sanitizeLine('one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen')).toBeNull();
+    expect(sanitizeLine(Array.from({ length: 29 }, (_, i) => `w${i}`).join(' '))).toBeNull(); // > 28 words
+    expect(sanitizeLine('One. Two. Three.')).toBeNull(); // > 2 sentences
+    expect(sanitizeLine('[sighs] Fine… Acceptable.')).toBe('[sighs] Fine… Acceptable.'); // ellipsis is not a sentence break
+    expect(sanitizeLine('[laughs] [calm] Done. [slowly] [sighs] Again.')).toBe('[calm] Done. [slowly] Again.'); // ≤ 2 allowed tags
     expect(sanitizeLine('   ')).toBeNull();
   });
 
-  it('every canned line obeys the 15-word rule', () => {
-    Object.values(CANNED_LINES).flat().forEach((line) => expect(sanitizeLine(line)).toBe(line));
+  it('every canned line passes sanitizeLine (≤ 2 sentences, ≤ 2 tags) and has a mood', () => {
+    Object.values(CANNED_LINES).flat().forEach((line) => {
+      expect(sanitizeLine(line)).toBe(line);
+      expect(sentenceCount(stripTags(line))).toBeLessThanOrEqual(2);
+    });
+    expect(Object.keys(VOICE_MOODS).sort()).toEqual(Object.keys(CANNED_LINES).sort());
   });
 });

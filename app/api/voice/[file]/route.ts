@@ -1,5 +1,5 @@
-/** GET /api/voice/:hash.mp3 — a cached Polly line (immutable: the name is a hash of voice + text). */
-import { readCachedVoice } from '../../../../lib/aws/polly';
+/** GET /api/voice/:hash.mp3 — a cached Iris line (ElevenLabs or Polly; immutable: the name is a hash of provider + voice + text). */
+import { readCachedVoice } from '../../../../lib/voice/tts';
 import { fail } from '../../../../lib/api-response';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ file: string }> }): Promise<Response> {
