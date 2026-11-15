@@ -1,6 +1,6 @@
 'use client';
 /**
- * /hunter — the iPhone armband. AWAKEN grants motion access and streams the accelerometer;
+ * /hunter — the iPhone armband. BEGIN grants motion access and streams the accelerometer;
  * the System stream drives the live rep count, rejection flashes and level-up / penalty overlays.
  * Player: `?player=<id>` or the one remembered on this phone, else a join form.
  */
@@ -9,9 +9,14 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Player, Quest, StreamEvent } from '../../lib/schemas';
 import { createPlayer, fetchPlayerQuests, pickPhoneQuest, startQuest, upsertQuest, type PhoneQuestType } from './api';
 import { QuestPanel } from './QuestPanel';
+import { PocketMode } from './PocketMode';
+import { formatRepDebug, isDebugSearch, phoneExercise } from './repDebug';
+import { nextSensorPaused, type SensorPauseEvent } from './screenGuard';
 import { SystemOverlay, type OverlayMessage } from './SystemOverlay';
 import { useMotionSender, type MotionStatus } from './useMotionSender';
+import { useRepDebug } from './useRepDebug';
 import { useSystemStream } from './useSystemStream';
+import { useWakeLock } from './useWakeLock';
 
 const STORAGE_KEY = 'awaken.playerId';
 const REJECTION_MS = 1_500;
@@ -52,11 +57,31 @@ export function HunterClient() {
   const [voice, setVoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-  const focusedSession = pickPhoneQuest(quests)?.sessionId;
-  const motionSender = useMotionSender(focusedSession);
+  const [isDebug, setIsDebug] = useState(false);
+  const [lastRejection, setLastRejection] = useState<string | null>(null);
+  const focused = pickPhoneQuest(quests);
+  const debugExercise = phoneExercise(focused?.type);
+  const repDebug = useRepDebug(debugExercise, isDebug);
+  const motionSender = useMotionSender(focused?.sessionId, isDebug ? repDebug.onReading : undefined);
+  const isStreaming = motionSender.status === 'streaming' || motionSender.status === 'offline';
+  const isVowActive = focused !== null;
+  const [isPocket, setIsPocket] = useState(false);
+  const [isSensorPaused, setIsSensorPaused] = useState(false);
+  const pause = useCallback((event: SensorPauseEvent) => setIsSensorPaused((paused) => nextSensorPaused(paused, event)), []);
+  const exitPocket = useCallback(() => setIsPocket(false), []);
+  useWakeLock(isVowActive || isStreaming);
+
+  useEffect(() => {
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'hidden') pause({ type: 'hidden', vowActive: isVowActive, streaming: isStreaming });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [pause, isVowActive, isStreaming]);
 
   useEffect(() => {
     setPlayerId(rememberedPlayerId()); // eslint-disable-line react-hooks/set-state-in-effect -- reads browser-only state after hydration
+    setIsDebug(isDebugSearch(window.location.search));
   }, []);
 
   const refresh = useCallback(async (id: string) => {
@@ -100,12 +125,15 @@ export function HunterClient() {
       switch (event.type) {
         case 'rep':
           if (event.playerId === playerId) {
+            pause({ type: 'rep' });
             setFocusedQuestId(event.questId);
             setQuests((qs) => qs.map((q) => (q.id === event.questId ? { ...q, progress: event.count } : q)));
           }
           return;
         case 'rep.rejected':
-          if (event.playerId === playerId) setRejection(event.reason);
+          if (event.playerId !== playerId) return;
+          setRejection(event.reason);
+          setLastRejection(event.reason);
           return;
         case 'quest.update':
           if (event.quest.playerId === playerId) setQuests((qs) => upsertQuest(qs, event.quest));
@@ -113,6 +141,7 @@ export function HunterClient() {
         case 'quest.complete':
           if (event.quest.playerId !== playerId) return;
           setQuests((qs) => upsertQuest(qs, event.quest));
+          setIsPocket(false); // show the moment
           setOverlay({ id: Date.now(), tone: 'blue', header: '[VOW KEPT]', title: event.quest.title, detail: `+${event.xpGained} Proof` });
           void refresh(playerId);
           return;
@@ -131,7 +160,7 @@ export function HunterClient() {
           return;
       }
     },
-    [playerId, refresh],
+    [playerId, refresh, pause],
   );
   const isConnected = useSystemStream(handleEvent);
 
@@ -171,8 +200,7 @@ export function HunterClient() {
       setQuests((qs) => upsertQuest(qs, quest));
     });
 
-  const quest = pickPhoneQuest(quests);
-  const isStreaming = motionSender.status === 'streaming' || motionSender.status === 'offline';
+  const quest = focused;
 
   return (
     <MotionConfig reducedMotion="user">
@@ -219,8 +247,28 @@ export function HunterClient() {
               {STATUS_TEXT[motionSender.status]}{isStreaming ? ` · ${motionSender.sent} samples` : ''}
             </p>
 
+            {isSensorPaused && (
+              <button type="button" role="alert" onClick={() => pause({ type: 'dismiss' })}
+                className="w-full rounded-lg border border-[#FBBF24]/60 bg-[#FBBF24]/10 p-3 text-left text-sm text-[#FBBF24]">
+                Sensor paused — screen was locked. Reps while it was off were not counted. Tap to dismiss.
+              </button>
+            )}
+
+            {isStreaming && quest && (
+              <button type="button" onClick={() => setIsPocket(true)}
+                className="w-full rounded-xl border border-white/20 py-3 font-mono text-sm tracking-widest text-white/70">
+                POCKET MODE
+              </button>
+            )}
+
             <QuestPanel quest={quest} isFocused={quest !== null && quest.id === focusedQuestId} rejection={rejection}
               isBusy={isBusy} onFocus={(id) => void handleFocus(id)} onStartType={(type) => void handleStartType(type)} />
+
+            {isDebug && (
+              <p data-testid="rep-debug" className="break-words font-mono text-[11px] text-white/60">
+                {formatRepDebug({ exercise: debugExercise, snapshot: repDebug.snapshot, serverReason: lastRejection })}
+              </p>
+            )}
 
             {voice && <p className="text-center font-mono text-sm italic text-[#38BDF8]/90" aria-live="polite">“{voice}”</p>}
           </div>
@@ -228,6 +276,7 @@ export function HunterClient() {
 
         {error && <p role="alert" className="mt-4 rounded-lg border border-[#EF4444]/50 bg-[#EF4444]/10 p-3 text-sm text-[#EF4444]">{error}</p>}
         <SystemOverlay message={overlay} onDismiss={() => setOverlay(null)} />
+        {isPocket && quest && <PocketMode progress={quest.progress} target={quest.target} onExit={exitPocket} />}
       </main>
     </MotionConfig>
   );

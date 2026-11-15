@@ -26,6 +26,7 @@
  */
 import type { Reading } from '../../lib/schemas';
 import { MedianFilter } from './smoothing';
+import type { RepDebug } from './repDebug';
 import type { Verifier, VerifierEvent } from './types';
 import { VerticalMotionTracker, dominantFrequencyHz, type Vec3 } from './verticalMotion';
 
@@ -46,8 +47,18 @@ export const SETTLE_MS = 400;
 export const DEEP_FRACTION = 0.7;
 export const MIN_REP_MS = 800;
 export const MAX_REP_MS = 4_000;
-/** Peak rotation rate (deg/s) during a rep; above this the phone is being waved, not worn. */
+/**
+ * Peak rotation rate (deg/s) during a rep; above this the phone is being waved, not worn.
+ * Per exercise: jumping jacks swing the arm overhead at 300–500 °/s, as fast as waving, so they
+ * use their own counter (jackReps.ts) that tells waving apart by which side of rest it swings to.
+ */
 export const ROTATION_MAX_DPS = 240;
+export const ROTATION_LIMITS_DPS: Record<AccelExercise, number> = {
+  squat: ROTATION_MAX_DPS,
+  situp: ROTATION_MAX_DPS,
+  armPushup: ROTATION_MAX_DPS,
+  jumpingjack: Number.POSITIVE_INFINITY, // see jackReps.ts — not counted by this class
+};
 /** Dominant vertical-accel frequency (Hz) above which the motion is shaking, not a rep. */
 export const SHAKE_MAX_HZ = 2.5;
 
@@ -95,8 +106,13 @@ export class AccelRepCounter implements Verifier {
   private calibrationDepths: number[] = [];
   private depth: number | null = null;
   private lastT: number | null = null;
+  private debug: RepDebug = { calibrated: false, progress: 0 };
 
   constructor(readonly exercise: AccelExercise) {}
+
+  get debugState(): RepDebug {
+    return this.debug;
+  }
 
   get count(): number {
     return this.reps;
@@ -119,7 +135,20 @@ export class AccelRepCounter implements Verifier {
     this.buffer = [...this.buffer.filter((s) => t - s.t <= BUFFER_MS), sample];
     const events = untrusted ? this.abandonInProgress(t) : this.step(x, t, still);
     this.rezeroIfResting(still, t);
+    this.updateDebug(x, sample.rot);
     return events;
+  }
+
+  private updateDebug(x: number, rotDps: number | undefined): void {
+    const phase = this.phase;
+    const away = phase && phase.kind !== 'home' && this.direction ? x * this.direction - phase.home : 0;
+    this.debug = {
+      ...this.debug,
+      calibrated: this.depth !== null,
+      progress: this.depth ? away / this.depth : away,
+      depth: this.depth ?? undefined,
+      rotDps,
+    };
   }
 
   private step(x: number, t: number, still: boolean): VerifierEvent[] {
@@ -221,6 +250,7 @@ export class AccelRepCounter implements Verifier {
       this.tracker.resetDisplacement();
       this.phase = { kind: 'home', home: 0, homeT: this.lastT ?? 0 };
     }
+    this.debug = { ...this.debug, lastReason: reason };
     return [{ type: 'rep.rejected', reason }];
   }
 
@@ -228,7 +258,7 @@ export class AccelRepCounter implements Verifier {
   private judge({ startT, bottomT, endT }: CycleTimes): string | null {
     const window = this.buffer.filter((s) => s.t >= startT && s.t <= endT);
     const rotations = window.flatMap((s) => (s.rot === undefined ? [] : [s.rot]));
-    if (rotations.length > 0 && Math.max(...rotations) > ROTATION_MAX_DPS) return REASON_TUMBLING;
+    if (rotations.length > 0 && Math.max(...rotations) > ROTATION_LIMITS_DPS[this.exercise]) return REASON_TUMBLING;
     if (dominantFrequencyHz(window.map((s) => ({ t: s.t, v: s.aUp }))) > SHAKE_MAX_HZ) return REASON_SHAKING;
     const duration = endT - startT;
     if (duration < MIN_REP_MS) return REASON_TOO_FAST;

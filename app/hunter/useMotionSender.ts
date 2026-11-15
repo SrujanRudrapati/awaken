@@ -3,7 +3,7 @@
  * Streams the phone's accelerometer to POST /api/readings (source 'phone'): ~30 Hz samples,
  * one batch every 200 ms, tagged with the focused vow's sessionId (untagged readings count toward nothing).
  * start() must run inside a tap — iOS only grants motion access then.
- * Also holds a screen wake lock so the phone keeps sending from the armband.
+ * The screen wake lock lives in useWakeLock (held while a vow is active or the sensor streams).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Reading } from '../../lib/schemas';
@@ -25,20 +25,17 @@ async function requestMotionPermission(): Promise<boolean> {
   }
 }
 
-async function requestWakeLock(): Promise<WakeLockSentinel | null> {
-  try {
-    return (await navigator.wakeLock?.request('screen')) ?? null;
-  } catch {
-    return null; // not supported / low battery: the page still works, the screen may sleep
-  }
-}
-
-export function useMotionSender(sessionId: string | undefined): { status: MotionStatus; sent: number; start: () => Promise<void>; stop: () => void } {
+export function useMotionSender(
+  sessionId: string | undefined,
+  onReading?: (reading: Reading) => void,
+): { status: MotionStatus; sent: number; start: () => Promise<void>; stop: () => void } {
   const [status, setStatus] = useState<MotionStatus>('idle');
   const session = useRef(sessionId);
+  const tap = useRef(onReading);
   useEffect(() => {
     session.current = sessionId;
-  }, [sessionId]);
+    tap.current = onReading;
+  }, [sessionId, onReading]);
   const [sent, setSent] = useState(0);
   const queue = useRef<Reading[]>([]);
   const lastKept = useRef<number | null>(null);
@@ -85,20 +82,13 @@ export function useMotionSender(sessionId: string | undefined): { status: Motion
       if (!reading) return;
       lastKept.current = now;
       queue.current = [...queue.current, reading];
+      tap.current?.(reading);
     };
     window.addEventListener('devicemotion', onMotion);
     const timer = setInterval(() => void flush(), FLUSH_INTERVAL_MS);
-    let wakeLock = await requestWakeLock();
-    const onVisible = async (): Promise<void> => {
-      if (document.visibilityState === 'visible' && !wakeLock) wakeLock = await requestWakeLock();
-    };
-    document.addEventListener('visibilitychange', onVisible);
     cleanup.current = () => {
       window.removeEventListener('devicemotion', onMotion);
-      document.removeEventListener('visibilitychange', onVisible);
       clearInterval(timer);
-      void wakeLock?.release().catch(() => {});
-      wakeLock = null;
       queue.current = [];
     };
     setStatus('streaming');
