@@ -183,3 +183,12 @@ No hardware? `npm run sim jail | meditate | lightsout` exercises each verifier e
 **Lights out** (light A1): first 1 s calibrates the lit room — start with the lights ON.
 - [ ] Start `{"type":"lightsout"}` → switch the lights off → after 2 s dark the display shows `DARK`, quest done.
 - [ ] A hand shadow over the sensor (< 2 s) must not complete it.
+
+---
+
+## Phase 9 — AI checks (needs Wi-Fi; everything falls back to canned content offline)
+
+- [ ] Voice: keep `curl -N localhost:3000/api/stream | grep voice` open, trigger an emergency → a `voice` line within ~1–3 s.
+      Wi-Fi off → the line is a canned one (still instant).
+- [ ] Focus quiz after a jail session: `POST /api/quiz {"playerId","questId","topic":"what you studied"}` →
+      3 questions; `POST /api/quiz/answer {"answers":[i,i,i]}` → ≥2 right completes it (+INT).
