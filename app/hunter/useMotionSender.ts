@@ -33,12 +33,17 @@ async function requestWakeLock(): Promise<WakeLockSentinel | null> {
   }
 }
 
-export function useMotionSender(sessionId: string | undefined): { status: MotionStatus; sent: number; start: () => Promise<void>; stop: () => void } {
+export function useMotionSender(
+  sessionId: string | undefined,
+  onReading?: (reading: Reading) => void,
+): { status: MotionStatus; sent: number; start: () => Promise<void>; stop: () => void } {
   const [status, setStatus] = useState<MotionStatus>('idle');
   const session = useRef(sessionId);
+  const tap = useRef(onReading);
   useEffect(() => {
     session.current = sessionId;
-  }, [sessionId]);
+    tap.current = onReading;
+  }, [sessionId, onReading]);
   const [sent, setSent] = useState(0);
   const queue = useRef<Reading[]>([]);
   const lastKept = useRef<number | null>(null);
@@ -85,6 +90,7 @@ export function useMotionSender(sessionId: string | undefined): { status: Motion
       if (!reading) return;
       lastKept.current = now;
       queue.current = [...queue.current, reading];
+      tap.current?.(reading);
     };
     window.addEventListener('devicemotion', onMotion);
     const timer = setInterval(() => void flush(), FLUSH_INTERVAL_MS);

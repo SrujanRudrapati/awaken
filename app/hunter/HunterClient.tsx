@@ -9,8 +9,10 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Player, Quest, StreamEvent } from '../../lib/schemas';
 import { createPlayer, fetchPlayerQuests, pickPhoneQuest, startQuest, upsertQuest, type PhoneQuestType } from './api';
 import { QuestPanel } from './QuestPanel';
+import { formatRepDebug, isDebugSearch, phoneExercise } from './repDebug';
 import { SystemOverlay, type OverlayMessage } from './SystemOverlay';
 import { useMotionSender, type MotionStatus } from './useMotionSender';
+import { useRepDebug } from './useRepDebug';
 import { useSystemStream } from './useSystemStream';
 
 const STORAGE_KEY = 'awaken.playerId';
@@ -52,11 +54,16 @@ export function HunterClient() {
   const [voice, setVoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-  const focusedSession = pickPhoneQuest(quests)?.sessionId;
-  const motionSender = useMotionSender(focusedSession);
+  const [isDebug, setIsDebug] = useState(false);
+  const [lastRejection, setLastRejection] = useState<string | null>(null);
+  const focused = pickPhoneQuest(quests);
+  const debugExercise = phoneExercise(focused?.type);
+  const repDebug = useRepDebug(debugExercise, isDebug);
+  const motionSender = useMotionSender(focused?.sessionId, isDebug ? repDebug.onReading : undefined);
 
   useEffect(() => {
     setPlayerId(rememberedPlayerId()); // eslint-disable-line react-hooks/set-state-in-effect -- reads browser-only state after hydration
+    setIsDebug(isDebugSearch(window.location.search));
   }, []);
 
   const refresh = useCallback(async (id: string) => {
@@ -105,7 +112,9 @@ export function HunterClient() {
           }
           return;
         case 'rep.rejected':
-          if (event.playerId === playerId) setRejection(event.reason);
+          if (event.playerId !== playerId) return;
+          setRejection(event.reason);
+          setLastRejection(event.reason);
           return;
         case 'quest.update':
           if (event.quest.playerId === playerId) setQuests((qs) => upsertQuest(qs, event.quest));
@@ -171,7 +180,7 @@ export function HunterClient() {
       setQuests((qs) => upsertQuest(qs, quest));
     });
 
-  const quest = pickPhoneQuest(quests);
+  const quest = focused;
   const isStreaming = motionSender.status === 'streaming' || motionSender.status === 'offline';
 
   return (
@@ -221,6 +230,12 @@ export function HunterClient() {
 
             <QuestPanel quest={quest} isFocused={quest !== null && quest.id === focusedQuestId} rejection={rejection}
               isBusy={isBusy} onFocus={(id) => void handleFocus(id)} onStartType={(type) => void handleStartType(type)} />
+
+            {isDebug && (
+              <p data-testid="rep-debug" className="break-words font-mono text-[11px] text-white/60">
+                {formatRepDebug({ exercise: debugExercise, snapshot: repDebug.snapshot, serverReason: lastRejection })}
+              </p>
+            )}
 
             {voice && <p className="text-center font-mono text-sm italic text-[#38BDF8]/90" aria-live="polite">“{voice}”</p>}
           </div>
