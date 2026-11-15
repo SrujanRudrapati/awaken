@@ -60,6 +60,25 @@ describe('photo proof', () => {
     );
   });
 
+  it('Field Vows (gate) check in by photo: a confident photo at the event keeps the vow', async () => {
+    const gate = await startQuest('p1', { type: 'gate', title: 'Campus 5K at the Quad' });
+    vi.mocked(geminiJson).mockResolvedValue({ passed: true, confidence: 0.88, reason: 'Race bib and start banner visible.' });
+
+    const result = await submitPhotoProof(jpeg('p1', gate.id));
+
+    expect(result.passed).toBe(true);
+    expect(getQuest(gate.id)?.status).toBe('done');
+    expect(vi.mocked(geminiJson).mock.calls[0][0].prompt).toMatch(/Field Vow.*Campus 5K at the Quad/);
+  });
+
+  it('a Field Vow photo under 0.7 confidence does not check in', async () => {
+    const gate = await startQuest('p1', { type: 'gate', title: 'Campus 5K at the Quad' });
+    vi.mocked(geminiJson).mockResolvedValue({ passed: true, confidence: 0.5, reason: 'Could be any park.' });
+
+    expect((await submitPhotoProof(jpeg('p1', gate.id))).passed).toBe(false);
+    expect(getQuest(gate.id)?.status).toBe('active');
+  });
+
   it('a failed photo keeps the quest active (retry allowed) and publishes the reason', async () => {
     vi.mocked(geminiJson).mockResolvedValue({ passed: false, confidence: 0.95, reason: 'This is a screenshot.' });
     const events: unknown[] = [];

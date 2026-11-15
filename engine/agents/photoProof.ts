@@ -10,6 +10,7 @@ import { publish } from '../../lib/bus';
 import * as db from '../../lib/db';
 import { geminiJson } from '../../lib/llm';
 import { geminiVisionModel } from '../../lib/models';
+import type { Quest } from '../../lib/schemas';
 import { QuestError, completeQuest, getQuest, type CompletionResult } from '../quests';
 
 export const MIN_CONFIDENCE = 0.7;
@@ -64,7 +65,8 @@ export interface PhotoProofResult extends Verdict {
 function requirePhotoQuest(playerId: string, questId: string) {
   const quest = getQuest(questId);
   if (!quest || quest.playerId !== playerId) throw new QuestError(`No vow ${questId} for ${playerId}`, 404);
-  if (quest.type !== 'photo') throw new QuestError(`Vow ${questId} is not a photo vow`, 400);
+  // Field Vows (gate) check in the same way: a photo taken at the real-world event.
+  if (quest.type !== 'photo' && quest.type !== 'gate') throw new QuestError(`Vow ${questId} is not a photo vow or Field Vow`, 400);
   if (quest.status !== 'active') throw new QuestError(`Vow ${questId} is already ${quest.status}`, 409);
   return quest;
 }
@@ -77,11 +79,17 @@ function validatePhoto(bytes: Uint8Array, mimeType: string): void {
   if (bytes.byteLength > MAX_PHOTO_BYTES) throw new QuestError('Photo too large (max 8 MB)', 400);
 }
 
-async function judge(title: string, bytes: Uint8Array, mimeType: string): Promise<Verdict> {
+function proofPrompt(quest: Quest): string {
+  return quest.type === 'gate'
+    ? `Field Vow: "${quest.title}". Does this photo show the person actually at this real-world event or place (not a screenshot or a stock photo)?`
+    : `Quest: "${quest.title}". Does this photo prove the quest was completed?`;
+}
+
+async function judge(quest: Quest, bytes: Uint8Array, mimeType: string): Promise<Verdict> {
   const raw = await geminiJson(
     {
       system: SYSTEM,
-      prompt: `Quest: "${title}". Does this photo prove the quest was completed?`,
+      prompt: proofPrompt(quest),
       model: geminiVisionModel(),
       images: [{ mimeType, base64: Buffer.from(bytes).toString('base64') }],
       timeoutMs: VISION_TIMEOUT_MS,
@@ -95,7 +103,7 @@ export async function submitPhotoProof(input: PhotoSubmission): Promise<PhotoPro
   const quest = requirePhotoQuest(input.playerId, input.questId);
   validatePhoto(input.bytes, input.mimeType);
 
-  const [stored, verdict] = await Promise.all([storeProof(input), judge(quest.title, input.bytes, input.mimeType)]);
+  const [stored, verdict] = await Promise.all([storeProof(input), judge(quest, input.bytes, input.mimeType)]);
   db.logEvent({
     playerId: input.playerId,
     kind: 'photo.verdict',

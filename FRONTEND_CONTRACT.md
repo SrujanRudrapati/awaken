@@ -115,7 +115,7 @@ Re-opening the same vow keeps its `sessionId`.
 | `run`, `steps`, `workout` | Vitality / Body | Apple Health Shortcut | km / steps / minutes |
 | `photo` | Discipline | photo + Gemini (§3.5) | photo |
 | `quiz` | Mind | 3 questions (§3.4) | trial |
-| `gate` | Presence | Field Vow (real-world event) | — |
+| `gate` | Presence | Field Vow (real-world event) — check in by photo (§3.5) | photo |
 
 Sensor vows (`pushup`…`lightsout`, `read`) can **only** be completed by sensors. Night vows (`lightsoutby`, `bedtime`, `sleep`) stay open until **noon the next day**.
 
@@ -217,6 +217,8 @@ Starting rank is E–C (never higher). SSE: `calibration.stage` per stage, `cali
   "storage": "s3", "photoUrl": "https://…signed (15 min)…", "xpGained": 30, "leveledUp": false }
 ```
 `passed:false` keeps the vow active (retry). `photoUrl` is null when stored locally.
+**Field Vows (`type: "gate"`) check in the same way**: post a photo taken at the event to `/api/photo` with the gate's
+`questId`; Iris checks it shows the person at that event/place (same ≥ 0.7 confidence rule).
 
 ### 3.6 Reading vow
 

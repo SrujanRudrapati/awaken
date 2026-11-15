@@ -71,6 +71,7 @@ Model: Opus 5.5 by default. Fable 5.2 only where marked 🧠.
 
 ### 🎯 3:00 AM — FEATURE FREEZE
 - [x] 🧠 (Fable) *"Review the whole backend vs SPEC.md: bugs, race conditions, demo risks. List only."* → fix top 5.
+  - 00:30–01:00 follow-ups: SSE via tunnels + `/api/events` polling fallback; sensor sessions (`sessionId`); Maritime agent in `agents/maritime/` (deploy per its README) + vows drop when Calibration ends; demo:reset full wipe + re-armed rank-up; `/api/readings` + bridge locked down; blank-player race; Field Vows by photo. Skipped by choice: mid-jail restart.
   - Fixed: urgent-vow countdown vs slow DB, slow lookup overwriting a stored player, Watch double-count on re-open, /api/player 503 offline, quiz/trial/mind double-start. Still open: SSE over quick tunnel (test on phone), phone/watch readings carry no playerId, no Maritime caller for /api/cron/daily, demo:reset leftovers, jail clock regression, gate photo check-in.
 
 ## APPLE WATCH APP (parallel, teammate, as soon as Xcode finishes)
