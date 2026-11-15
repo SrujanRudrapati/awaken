@@ -98,6 +98,9 @@ Device → laptop every 100 ms (reps need speed):
 `{"t":ms,"dist":cm,"ax":g,"ay":g,"az":g,"jail":0|1,"touch":0|1,"light":0-1023,"snd":0-1023,"bottle":0|1,"btn":0|1}`
 Laptop → device: `LCD:<line1>|<line2>`, `COLOR:<blue|red|gold|green>`, `LOCK`, `UNLOCK`, `BUZZ:<alarm|chime|tick>`, `SEG:<4 chars>`.
 
+### SSE events (backend → web app)
+`reading`, `rep`, `rep.rejected` (half-rep → "REP NOT COUNTED"), `quest.update`, `quest.complete`, `levelup`, `penalty`, `voice`. Payloads: `StreamEventSchema` in `lib/schemas.ts`.
+
 ### Verifiers (code, not AI — must be reliable)
 - **Push-up:** distance state machine: UP (> baseline−5 cm) → DOWN (< threshold, e.g. ≤ 12 cm from chest calibration) → UP = 1 rep. Min 0.5 s per rep. Not deep enough → "REP NOT COUNTED".
 - **Squat / jumping jack:** accelerometer magnitude peaks with hysteresis + min interval.
