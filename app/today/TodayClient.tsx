@@ -12,6 +12,7 @@ import { Iris } from '../../components/oath/Iris';
 import { NotSworn, OathShell } from '../../components/oath/OathShell';
 import { useIris } from '../../components/oath/useIris';
 import { usePerson } from '../../components/oath/usePerson';
+import { useToday } from '../../components/oath/useToday';
 import type { NightSummary, Quest, StreamEvent } from '../../lib/schemas';
 import { upsertQuest } from '../hunter/api';
 import { NewVow } from './NewVow';
@@ -41,6 +42,7 @@ export function TodayClient() {
   const [openTrial, setOpenTrial] = useState<OpenTrial | null>(null);
   const [night, setNight] = useState<{ summary: NightSummary; line?: string } | null>(null);
   const [isWide, setIsWide] = useState(false);
+  const today = useToday();
 
   useEffect(() => {
     const query = window.matchMedia(WIDE_SCREEN);
@@ -168,7 +170,7 @@ export function TodayClient() {
             </aside>
 
             <section className="today-vows" aria-labelledby="today-title">
-              <p className="kick mono">{new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+              <p className="kick mono">{today ? today.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }) : 'Today'}</p>
               <h1 id="today-title" className="display">Today&rsquo;s <span className="serif">vows.</span></h1>
 
               {error && <p role="alert" className="shell-error glass">{error}</p>}
