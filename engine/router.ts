@@ -139,7 +139,7 @@ function usesHomeBase(type: QuestType): boolean {
  */
 export function setActiveQuest(quest: Quest): string {
   if (quest.status !== 'active') {
-    throw new Error(`Quest ${quest.id} must be active to start (status: ${quest.status})`);
+    throw new Error(`Vow ${quest.id} must be active to start (status: ${quest.status})`);
   }
   const state = getState();
   const existing = state.active.get(quest.playerId);

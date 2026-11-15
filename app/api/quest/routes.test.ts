@@ -54,12 +54,12 @@ describe('quest API routes', () => {
   });
 
   it('maps QuestError to its status', async () => {
-    vi.mocked(engine.startQuest).mockRejectedValue(new engine.QuestError('No player ghost', 404));
+    vi.mocked(engine.startQuest).mockRejectedValue(new engine.QuestError('No one found with id ghost', 404));
 
     const res = await startRoute(post({ playerId: 'ghost', type: 'pushup' }));
 
     expect(res.status).toBe(404);
-    expect((await res.json()).error).toBe('No player ghost');
+    expect((await res.json()).error).toBe('No one found with id ghost');
   });
 
   it('POST /api/quest/emergency defaults the exercise', async () => {

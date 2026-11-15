@@ -3,7 +3,8 @@
  * Checks real outputs (titles, canned lines, voice facts, report fallback, errors) plus the
  * visible text of the /hunter page. Identifiers (playerId, quest.*, routes) are allowed.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -42,6 +43,32 @@ function visibleText(file: string): string[] {
   const isClassList = (t: string) => t.split(/\s+/).filter((token) => /^[a-z!]+[-:]/.test(token)).length >= 2;
   // Single tokens without spaces are identifiers/keys/values ('quest.update', 'awaken.playerId'), not prose.
   return texts.filter((t) => /[A-Za-z]/.test(t) && (/\s/.test(t) || /^\[.*\]$/.test(t)) && !isClassList(t));
+}
+
+/** Every file under `dir` (relative to the repo root). */
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, encoding: 'utf8' }).map((f) => join(dir, f)).filter((f) => /\.tsx?$/.test(f));
+}
+
+/**
+ * Prose passed to calls whose callee matches `callee` (e.g. fail(400, 'msg'), new QuestError(`…`)):
+ * string literals and the literal parts of templates — not the interpolated code.
+ */
+function callTexts(file: string, callee: RegExp): string[] {
+  const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const texts: string[] = [];
+  const collect = (node: ts.Node): void => {
+    if (ts.isStringLiteralLike(node) || ts.isTemplateLiteralToken(node)) texts.push(node.text.trim());
+    if (ts.isTemplateSpan(node)) return collect(node.literal); // skip the ${expression}
+    ts.forEachChild(node, collect);
+  };
+  const visit = (node: ts.Node): void => {
+    const name = ts.isCallExpression(node) ? node.expression.getText() : ts.isNewExpression(node) ? `new ${node.expression.getText()}` : null;
+    if (name !== null && callee.test(name)) (ts.isCallExpression(node) || ts.isNewExpression(node) ? node.arguments ?? [] : []).forEach(collect);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return texts.filter((t) => /[A-Za-z]/.test(t) && /\s/.test(t));
 }
 
 describe('OATH brand', () => {
@@ -95,6 +122,34 @@ describe('OATH brand', () => {
     await expect(startQuest('nobody', { type: 'pushup' })).rejects.toThrow(/No one found/);
     await expect(startQuest('nobody', { type: 'pushup' })).rejects.not.toThrow(/player/i);
     expect(getQuest('missing')).toBeUndefined();
+  });
+
+  it('no page or component under app/ shows old-brand words', () => {
+    const files = sourceFiles('app').filter((f) => f.endsWith('.tsx'));
+    expect(files.length).toBeGreaterThanOrEqual(7);
+    for (const text of files.flatMap(visibleText)) {
+      expectClean(text);
+      expect(text, text).not.toMatch(OLD_TERMS);
+    }
+  });
+
+  it('API error messages people can see are clean (every fail(...) in app/api)', () => {
+    const messages = sourceFiles('app/api').filter((f) => f.endsWith('route.ts')).flatMap((f) => callTexts(f, /^fail$/));
+    expect(messages.length).toBeGreaterThan(10);
+    for (const text of messages) {
+      expectClean(text);
+      expect(text, text).not.toMatch(OLD_TERMS);
+    }
+  });
+
+  it('engine errors that reach the client are clean (QuestError / Error messages)', () => {
+    const files = [...sourceFiles('engine'), ...sourceFiles('lib')].filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+    const messages = files.flatMap((f) => callTexts(f, /^(new )?(QuestError|Error)$/));
+    expect(messages.length).toBeGreaterThan(5);
+    for (const text of messages) {
+      expectClean(text);
+      expect(text, text).not.toMatch(OLD_TERMS);
+    }
   });
 
   it('/hunter shows no old-brand words', () => {

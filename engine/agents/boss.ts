@@ -128,7 +128,7 @@ export async function weeklyReport(playerId: string, options: { fresh?: boolean;
   if (cached && age < (options.fresh ? MIN_FRESH_MS : REPORT_CACHE_MS)) return cached;
 
   const player = await getPlayer(playerId);
-  if (!player) throw new QuestError(`No player ${playerId}`, 404);
+  if (!player) throw new QuestError(`No one found with id ${playerId}`, 404);
   const history = await db.statHistory(playerId, REPORT_DAYS).catch(() => []);
   const facts = weekFacts(history, listQuests(playerId), now);
 
