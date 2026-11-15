@@ -1,19 +1,2 @@
-import type { Metadata, Viewport } from 'next';
-import { HunterClient } from './HunterClient';
-
-export const metadata: Metadata = {
-  title: 'Oath — Armband',
-  description: 'Phone armband sensor and Iris window',
-};
-
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  viewportFit: 'cover',
-  themeColor: '#05070D',
-};
-
-export default function HunterPage() {
-  return <HunterClient />;
-}
+/** Old address of the phone page — kept as an alias of /band so saved links and QR codes still work. */
+export { default, metadata } from '../band/page';

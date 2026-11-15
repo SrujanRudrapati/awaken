@@ -1,0 +1,375 @@
+/* OATH design layer — tokens and shared surfaces (source: design/oath.html, design/iris.html). */
+@property --a {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #7dd3fc;
+}
+
+:root {
+  --bg: #05060a;
+  --ink: #eceff6;
+  --mute: #7d8699;
+  --line: rgba(255, 255, 255, 0.08);
+  --blue: #7dd3fc;
+  --gold: #f5c46b;
+  --red: #f0524f;
+  --vio: #b69cff;
+  --a: #7dd3fc;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+}
+
+html {
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-inter-tight), system-ui, sans-serif;
+  font-weight: 300;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--a);
+  color: var(--bg);
+}
+
+/* Iris's mood tints everything inside the wrapper. */
+[data-mood] {
+  transition: --a 1s var(--ease);
+}
+[data-mood="watching"],
+[data-mood="unimpressed"] {
+  --a: var(--blue);
+}
+[data-mood="proud"] {
+  --a: var(--gold);
+}
+[data-mood="furious"] {
+  --a: var(--red);
+}
+[data-mood="sleepy"] {
+  --a: var(--vio);
+}
+
+.mono {
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.serif {
+  font-family: var(--font-instrument-serif), serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.mute {
+  color: var(--mute);
+}
+.accent {
+  color: var(--a);
+}
+
+.glass {
+  position: relative;
+  border-radius: 22px;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.012) 55%);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 30px 80px -30px rgba(0, 0, 0, 0.8);
+}
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(400px circle at var(--mx, 50%) var(--my, 0%), color-mix(in srgb, var(--a) 70%, transparent), transparent 45%);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 0 28px;
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition:
+    background 0.5s var(--ease),
+    color 0.5s,
+    border-color 0.5s,
+    transform 0.3s var(--ease),
+    opacity 0.3s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--a);
+  box-shadow: 0 0 12px var(--a);
+  flex: none;
+}
+@media (hover: hover) {
+  .btn:hover:not(:disabled) {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.btn:focus-visible,
+.focusable:focus-visible {
+  outline: 1px solid var(--a);
+  outline-offset: 3px;
+}
+.btn-quiet {
+  min-height: 40px;
+  padding: 0 18px;
+  color: var(--mute);
+}
+
+.kick {
+  color: var(--a);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.kick::before {
+  content: "";
+  width: 28px;
+  height: 1px;
+  background: currentColor;
+}
+
+.track {
+  height: 2px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.track > i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  background: var(--a);
+  box-shadow: 0 0 14px var(--a);
+  transition: transform 0.6s var(--ease);
+}
+
+.veil {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 70% at 50% 50%, transparent 40%, rgba(5, 6, 10, 0.75) 100%);
+}
+.grain {
+  position: fixed;
+  inset: -50%;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain 1s steps(4) infinite;
+}
+@keyframes grain {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-3%, 2%);
+  }
+  50% {
+    transform: translate(2%, -3%);
+  }
+  75% {
+    transform: translate(-2%, -1%);
+  }
+}
+
+/* ambient page glow in the mood colour */
+.aura {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 38% at 50% 0%, color-mix(in srgb, var(--a) 16%, transparent), transparent 70%),
+    radial-gradient(50% 30% at 80% 100%, color-mix(in srgb, var(--a) 7%, transparent), transparent 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition-duration: 0.01s !important;
+  }
+}
+
+/* ── Iris, 2D glyph ─────────────────────────────────────────────────────── */
+.iris-glyph {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  animation: iris-float 5.5s ease-in-out infinite;
+  transition: --a 1s var(--ease);
+}
+.iris-glyph svg {
+  position: relative;
+  overflow: visible;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--a) 55%, transparent));
+}
+.iris-glyph-glow {
+  position: absolute;
+  inset: -45%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--a) 34%, transparent), transparent 62%);
+  opacity: 0.7;
+  transition: opacity 0.6s, transform 0.6s var(--ease);
+}
+.iris-glyph[data-speaking] .iris-glyph-glow {
+  animation: iris-speak 0.42s ease-in-out infinite alternate;
+}
+.iris-glyph[data-mood="proud"] .iris-glyph-glow {
+  opacity: 1;
+  transform: scale(1.15);
+}
+.iris-glyph-lid {
+  fill: #0a101b;
+  stroke: var(--a);
+  stroke-width: 1;
+  transition: transform 0.35s var(--ease);
+}
+.iris-glyph-lid-top {
+  transform: translateY(calc(var(--lid) * -10.5px));
+}
+.iris-glyph-lid-bottom {
+  transform: translateY(calc(var(--lid) * 10.5px));
+}
+.iris-glyph-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: iris-blink 5.2s infinite;
+}
+.iris-glyph[data-mood="sleepy"] .iris-glyph-eye,
+.iris-glyph[data-mood="proud"] .iris-glyph-eye {
+  animation: none;
+}
+.iris-glyph[data-mood="sleepy"] {
+  animation-duration: 9s;
+}
+.iris-glyph[data-mood="furious"] .iris-glyph-body {
+  animation: iris-shake 0.28s steps(2) infinite;
+}
+.iris-glyph-pupil {
+  transition: r 0.5s var(--ease);
+}
+@keyframes iris-float {
+  50% {
+    transform: translateY(-4%);
+  }
+}
+@keyframes iris-blink {
+  0%,
+  94%,
+  100% {
+    transform: scaleY(1);
+  }
+  97% {
+    transform: scaleY(0.06);
+  }
+}
+@keyframes iris-speak {
+  to {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+}
+@keyframes iris-shake {
+  50% {
+    transform: translateX(1.2px);
+  }
+}
+
+/* ── Announcement overlay ───────────────────────────────────────────────── */
+.announce {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 6, 10, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--ink);
+  border: 0;
+  cursor: pointer;
+}
+.announce[data-tone="blue"] {
+  --a: var(--blue);
+}
+.announce[data-tone="gold"] {
+  --a: var(--gold);
+}
+.announce[data-tone="red"] {
+  --a: var(--red);
+}
+.announce-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: min(380px, 100%);
+  padding: 44px 28px 30px;
+  text-align: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 90px -20px var(--a);
+}
+.announce-title {
+  font-size: clamp(40px, 11vw, 64px);
+  font-weight: 200;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+.announce-detail {
+  color: var(--mute);
+  font-size: 17px;
+  margin-bottom: 18px;
+}

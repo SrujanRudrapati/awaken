@@ -1,0 +1,323 @@
+/* /band — one thumb, one glance. Inter Tight everywhere; JetBrains Mono only on tiny labels. */
+.band {
+  position: relative;
+  min-height: 100dvh;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: calc(var(--safe-t) + 14px) calc(var(--safe-r) + 18px) calc(var(--safe-b) + 22px) calc(var(--safe-l) + 18px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+.band > :not(.aura, .grain, .announce) {
+  position: relative;
+  z-index: 2;
+}
+.band-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 32px;
+}
+.band-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  font-size: 13px;
+}
+.band-logo svg {
+  width: 15px;
+  height: 15px;
+}
+.band-offline {
+  color: var(--red);
+}
+.band-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+/* who */
+.band-id {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+}
+.band-who {
+  min-width: 0;
+}
+.band-name {
+  font-size: 28px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.band-rank {
+  text-align: right;
+}
+.band-rank-letter {
+  font-size: 60px;
+  font-weight: 200;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+  color: var(--gold);
+  text-shadow: 0 0 28px color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+/* Iris's line */
+.band-caption {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 13px 18px;
+  border-radius: 18px;
+  font-size: 16px;
+  line-height: 1.35;
+  color: var(--ink);
+  min-height: 48px;
+}
+.band-caption span:last-child {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.band-caption .mono {
+  flex: none;
+}
+
+/* ring */
+.vow-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.vow-ring[data-tone="red"] {
+  --a: var(--red);
+}
+.vow-ring-top {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+.vow-ring-dial {
+  position: relative;
+  width: min(60vw, 250px, 29dvh);
+  aspect-ratio: 1;
+}
+.vow-ring-dial::before {
+  content: "";
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--a) 13%, transparent), transparent 70%);
+}
+.vow-ring-dial svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  overflow: visible;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--a) 80%, transparent));
+}
+.vow-ring-rail,
+.vow-ring-arc {
+  fill: none;
+  stroke-width: 1.1;
+}
+.vow-ring-rail {
+  stroke: color-mix(in srgb, var(--a) 22%, rgba(255, 255, 255, 0.08));
+}
+.vow-ring-arc {
+  stroke: var(--a);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  transition:
+    stroke-dashoffset 0.6s var(--ease),
+    stroke 0.3s;
+}
+.vow-ring-count {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.vow-ring-count b {
+  display: block;
+  font-size: clamp(72px, min(27vw, 13dvh), 120px);
+  font-weight: 200;
+  letter-spacing: -0.07em;
+  line-height: 0.82;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 34px color-mix(in srgb, var(--a) 55%, transparent);
+}
+.vow-ring[data-rejected] .vow-ring-dial {
+  animation: ring-reject 0.4s var(--ease);
+}
+.vow-ring-flash {
+  min-height: 18px;
+  color: var(--red);
+  text-align: center;
+}
+@keyframes ring-reject {
+  20% {
+    transform: translateX(-7px);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+  80% {
+    transform: translateX(-3px);
+  }
+}
+
+/* begin */
+.band-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.band-begin {
+  width: 100%;
+  min-height: 58px;
+  font-size: 20px;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 0 44px -14px var(--a);
+  border-color: color-mix(in srgb, var(--a) 45%, rgba(255, 255, 255, 0.16));
+}
+.band-status {
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* 2×2 vow cards */
+.band-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.band-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 11px 14px;
+  border-radius: 18px;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    transform 0.3s var(--ease),
+    opacity 0.3s;
+  -webkit-tap-highlight-color: transparent;
+}
+.band-card:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.band-card:disabled {
+  opacity: 0.5;
+}
+.band-card-glyph {
+  grid-row: 1 / 3;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  color: var(--a);
+  font-size: 14px;
+}
+.band-card-name {
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.band-card[data-active] {
+  border-color: color-mix(in srgb, var(--a) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 34px -12px var(--a);
+}
+.band-card[data-active] .mono {
+  color: var(--a);
+}
+
+.band-nav {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+.band-nav a {
+  color: var(--mute);
+  text-decoration: none;
+  padding: 8px 4px;
+}
+
+.band-error {
+  padding: 12px 16px;
+  border-radius: 16px;
+  border-color: color-mix(in srgb, var(--red) 50%, transparent);
+  color: var(--red);
+  font-size: 14px;
+}
+
+/* the oath form */
+.band-join {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  padding-bottom: 8dvh;
+}
+.band-join h1 {
+  font-size: clamp(54px, 16vw, 76px);
+  font-weight: 200;
+  letter-spacing: -0.045em;
+  line-height: 0.9;
+  margin-top: 26px;
+}
+.band-input {
+  width: 100%;
+  padding: 18px 22px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 22px;
+  text-align: center;
+  color: var(--ink);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.band-join .btn {
+  width: 100%;
+}
