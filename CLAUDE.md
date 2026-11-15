@@ -16,7 +16,7 @@ Arduino + Grove libs (LCD RGB Backlight, Ultrasonic Ranger, 3-axis accelerometer
 - Never call any Fable model at runtime. Model ids in `lib/models.ts`.
 - Verification is code-first: sensor verifiers decide reps/timers. LLMs never mark a sensor quest complete.
 - Photo proof: Gemini returns `{passed, confidence, reason}`; < 0.7 confidence = not passed.
-- Serial protocol + SSE event names fixed in SPEC §3: `reading`, `rep`, `quest.update`, `quest.complete`, `levelup`, `penalty`, `voice`.
+- Serial protocol + SSE event names fixed in SPEC §3: `reading`, `rep`, `rep.rejected`, `quest.update`, `quest.complete`, `levelup`, `penalty`, `voice`.
 - Demo mode: keyboard shortcuts to simulate reps if a sensor fails (clearly labelled).
 - Use only original names/art; never the anime's name, characters or artwork.
 - Keys in `.env.local`; never commit. Ask before adding deps. After 1 AM: fixes only.
