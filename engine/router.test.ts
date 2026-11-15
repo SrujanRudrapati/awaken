@@ -7,13 +7,13 @@ import { subscribe } from '../lib/bus';
 import { logEvent } from '../lib/db';
 import type { Quest, Reading, StreamEvent } from '../lib/schemas';
 import {
-  PRACTICE_PLAYER_ID,
-  PRACTICE_QUEST_ID,
   clearActiveQuest,
   getActiveQuest,
+  hasSensorVerifier,
   resetRouter,
   routeReading,
   setActiveQuest,
+  setCompletionHandler,
 } from './router';
 import { withRest } from './verifiers/testing';
 
@@ -179,21 +179,26 @@ describe('router', () => {
     expect(forQuest('q1')).toEqual([]);
   });
 
-  it('falls back to a practice push-up quest when nothing is active', () => {
+  it('ignores readings when no quest has been started', () => {
     pushups(2).forEach(routeReading);
 
-    expect(forQuest(PRACTICE_QUEST_ID).map((e) => e.type)).toEqual([
-      'rep', 'quest.update', 'rep', 'quest.update',
-    ]);
-    expect(getActiveQuest(PRACTICE_PLAYER_ID)).toMatchObject({ progress: 2, target: 10, xp: 0 });
+    expect(events).toEqual([]);
   });
 
-  it('drops the practice quest when a real quest starts', () => {
-    pushups(1).forEach(routeReading);
+  it('hands completed quests to the registered completion handler instead of publishing', () => {
+    const completed: Quest[] = [];
+    setCompletionHandler((q) => completed.push(q));
+    setActiveQuest(quest({ target: 2 }));
 
-    setActiveQuest(quest());
+    pushups(2).forEach(routeReading);
 
-    expect(getActiveQuest(PRACTICE_PLAYER_ID)).toBeUndefined();
+    expect(completed).toEqual([expect.objectContaining({ id: 'q1', status: 'done', progress: 2 })]);
+    expect(events.some((e) => e.type === 'quest.complete')).toBe(false);
+  });
+
+  it('knows which quest types have sensor verifiers', () => {
+    expect(['pushup', 'squat', 'jumpingjack', 'situp'].every((t) => hasSensorVerifier(t as Quest['type']))).toBe(true);
+    expect(hasSensorVerifier('steps')).toBe(false);
   });
 
   it('logs verified reps and rejected reps to Tiger with their source', () => {

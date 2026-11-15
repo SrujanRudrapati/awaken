@@ -16,19 +16,34 @@ export const RankSchema = z.enum(['E', 'D', 'C', 'B', 'A', 'S']);
 export type Rank = z.infer<typeof RankSchema>;
 
 export const QuestTypeSchema = z.enum([
+  // reps (Home Base pad / phone / Watch)
   'pushup',
   'squat',
   'jumpingjack',
   'situp',
+  'punch',
+  // Home Base timers
   'jail',
   'meditate',
   'lightsout',
-  'water',
+  // Apple Health (Shortcut sync)
+  'run',
+  'steps',
+  'workout',
+  'sleep',
+  // AI-verified
   'photo',
   'gate',
   'quiz',
 ]);
 export type QuestType = z.infer<typeof QuestTypeSchema>;
+
+export const DifficultySchema = z.enum(['easy', 'normal', 'hard']);
+export type Difficulty = z.infer<typeof DifficultySchema>;
+
+/** daily = midnight drop · emergency = timed surprise · penalty = harder retry after a failure. */
+export const QuestKindSchema = z.enum(['daily', 'manual', 'emergency', 'penalty']);
+export type QuestKind = z.infer<typeof QuestKindSchema>;
 
 export const QuestStatusSchema = z.enum(['active', 'done', 'failed']);
 export type QuestStatus = z.infer<typeof QuestStatusSchema>;
@@ -90,11 +105,13 @@ export const QuestSchema = z.object({
   stat: StatSchema,
   title: z.string().min(1),
   type: QuestTypeSchema,
-  target: z.number().positive(), // reps, seconds, bottles, photos…
+  target: z.number().positive(), // reps, seconds, km, steps, minutes, hours, photos…
   progress: z.number().min(0),
   xp: z.number().int().min(0),
   status: QuestStatusSchema,
   deadline: z.iso.datetime({ offset: true }),
+  difficulty: DifficultySchema.optional(),
+  kind: QuestKindSchema.optional(),
 });
 export type Quest = z.infer<typeof QuestSchema>;
 

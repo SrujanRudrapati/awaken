@@ -1,8 +1,9 @@
-/** GET /api/player/:id — the player plus 7 days of XP per stat. */
+/** GET /api/player/:id — the player (engine memory, else Tiger) plus 7 days of XP per stat. */
 import { connection } from 'next/server';
 import { z } from 'zod';
 import { fail, ok } from '../../../../lib/api-response';
-import { getPlayer, statHistory } from '../../../../lib/db';
+import { getPlayer } from '../../../../engine/quests';
+import { statHistory } from '../../../../lib/db';
 
 const IdSchema = z.string().min(1).max(64);
 

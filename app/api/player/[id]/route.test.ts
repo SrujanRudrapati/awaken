@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/server', () => ({ connection: vi.fn() }));
-vi.mock('../../../../lib/db', () => ({ getPlayer: vi.fn(), statHistory: vi.fn() }));
+vi.mock('../../../../engine/quests', () => ({ getPlayer: vi.fn() }));
+vi.mock('../../../../lib/db', () => ({ statHistory: vi.fn() }));
 
-import { getPlayer, statHistory } from '../../../../lib/db';
+import { getPlayer } from '../../../../engine/quests';
+import { statHistory } from '../../../../lib/db';
 import type { Player } from '../../../../lib/schemas';
 import { GET } from './route';
 

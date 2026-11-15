@@ -139,6 +139,15 @@ export async function getPlayer(id: string): Promise<Player | null> {
   return rows?.[0] ? rowToPlayer(rows[0]) : null;
 }
 
+/** All players (for the daily drop after a restart). */
+export async function listPlayers(limit = 100): Promise<Player[]> {
+  const rows = await query<PlayerRow>(
+    'SELECT id, name, rank, level, xp, stats, penalty FROM players ORDER BY created_at ASC LIMIT $1',
+    [limit],
+  );
+  return (rows ?? []).map(rowToPlayer).filter((p): p is Player => p !== null);
+}
+
 export type PlayerPatch = Partial<Omit<Player, 'id'>>;
 
 /** Column for each patchable field — the whitelist that keeps the dynamic SET safe. */

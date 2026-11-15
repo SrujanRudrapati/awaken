@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('../../../engine/quests', () => ({}));
 vi.mock('../../../engine/router', () => ({ routeReading: vi.fn() }));
 
 import { routeReading } from '../../../engine/router';

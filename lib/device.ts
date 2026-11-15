@@ -8,8 +8,17 @@ import { DeviceCommandSchema, type DeviceCommand } from './schemas';
 const DEFAULT_DEVICE_URL = 'http://localhost:3001';
 export const DEVICE_TIMEOUT_MS = 1_000;
 
-/** Resolves true if the bridge accepted the command, false otherwise. Never rejects. */
-export async function send(cmd: DeviceCommand): Promise<boolean> {
+/** One chain for every command, so the display never shows them out of order. */
+let queue: Promise<unknown> = Promise.resolve();
+
+/** Queues `cmd` behind every earlier command. Resolves true if the bridge accepted it. Never rejects. */
+export function send(cmd: DeviceCommand): Promise<boolean> {
+  const result = queue.then(() => post(cmd));
+  queue = result;
+  return result;
+}
+
+async function post(cmd: DeviceCommand): Promise<boolean> {
   const parsed = DeviceCommandSchema.safeParse(cmd);
   if (!parsed.success) {
     console.error(`[device] refusing invalid command ${JSON.stringify(cmd)}`); // a code bug, not an outage
@@ -30,9 +39,6 @@ export async function send(cmd: DeviceCommand): Promise<boolean> {
 
 /** Sends commands in order (e.g. BUZZ then SEG). Resolves true only if all were accepted. */
 export async function sendAll(cmds: readonly DeviceCommand[]): Promise<boolean> {
-  let allOk = true;
-  for (const cmd of cmds) {
-    allOk = (await send(cmd)) && allOk;
-  }
-  return allOk;
+  const results = await Promise.all(cmds.map(send)); // queued together: nothing can slip between them
+  return results.every(Boolean);
 }

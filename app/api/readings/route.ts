@@ -4,6 +4,7 @@
  * so the UI isn't flooded.
  */
 import { z } from 'zod';
+import '../../../engine/quests'; // registers the engine as the router's completion handler
 import { routeReading } from '../../../engine/router';
 import { fail, ok } from '../../../lib/api-response';
 import { publish } from '../../../lib/bus';

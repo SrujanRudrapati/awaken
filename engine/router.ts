@@ -2,7 +2,8 @@
  * Routes sensor readings to the active quest's verifier and publishes the results
  * (`rep`, `rep.rejected`, `quest.update`, `quest.complete`) on the bus.
  *
- * Readings belong to whichever player most recently started a quest. Each quest gets one
+ * Readings belong to whichever player most recently started a quest; with no quest
+ * started they are ignored here (they still reach the UI as `reading` events). Each quest gets one
  * verifier per sensor source that can verify it (VERIFIERS below) — e.g. push-ups count
  * from the Home Base pad or from the phone armband — and every source's reps add to the
  * same progress. Verifiers are pure code — nothing here asks an LLM whether a rep counted.
@@ -34,11 +35,12 @@ const VERIFIERS: Partial<Record<QuestType, Partial<Record<Source, VerifierFactor
   // jail / meditate / lightsout arrive in Phase 8
 };
 
-/** Until the quest-start API lands (Phase 7), an idle device runs this practice quest. */
-export const PRACTICE_PLAYER_ID = 'demo';
-export const PRACTICE_QUEST_ID = 'practice-pushup';
-const PRACTICE_TARGET_REPS = 10;
-const PRACTICE_DEADLINE_MS = 24 * 60 * 60 * 1000;
+/** Called when a sensor quest reaches its target. The quest engine awards XP and publishes. */
+export type CompletionHandler = (quest: Quest) => void;
+
+/** Default (no engine loaded, e.g. router tests): just announce the completion. */
+const publishCompletion: CompletionHandler = (quest) =>
+  publish({ type: 'quest.complete', quest, xpGained: quest.xp });
 
 interface ActiveEntry {
   quest: Quest;
@@ -49,12 +51,13 @@ interface ActiveEntry {
 interface RouterState {
   active: Map<string, ActiveEntry>;
   currentPlayerId: string | null;
+  onComplete: CompletionHandler;
 }
 
 const globalForRouter = globalThis as typeof globalThis & { __awakenRouter?: RouterState };
 
 function freshState(): RouterState {
-  return { active: new Map(), currentPlayerId: null };
+  return { active: new Map(), currentPlayerId: null, onComplete: publishCompletion };
 }
 
 function getState(): RouterState {
@@ -62,9 +65,19 @@ function getState(): RouterState {
   return globalForRouter.__awakenRouter;
 }
 
-/** Test hook: forget all quests. */
+/** Test hook: forget all quests and the completion handler. */
 export function resetRouter(): void {
   globalForRouter.__awakenRouter = freshState();
+}
+
+/** The quest engine registers itself here (state is global, so it survives hot reloads). */
+export function setCompletionHandler(handler: CompletionHandler): void {
+  getState().onComplete = handler;
+}
+
+/** True if some sensor source can count this quest type. */
+export function hasSensorVerifier(type: QuestType): boolean {
+  return Object.keys(VERIFIERS[type] ?? {}).length > 0;
 }
 
 function createVerifiers(type: QuestType): SourceVerifiers {
@@ -74,28 +87,12 @@ function createVerifiers(type: QuestType): SourceVerifiers {
   ) as SourceVerifiers;
 }
 
-function practiceQuest(): Quest {
-  return {
-    id: PRACTICE_QUEST_ID,
-    playerId: PRACTICE_PLAYER_ID,
-    stat: 'STR',
-    title: 'Practice push-ups',
-    type: 'pushup',
-    target: PRACTICE_TARGET_REPS,
-    progress: 0,
-    xp: 0,
-    status: 'active',
-    deadline: new Date(Date.now() + PRACTICE_DEADLINE_MS).toISOString(),
-  };
-}
-
 /** Makes `quest` the one the device's readings count toward. */
 export function setActiveQuest(quest: Quest): void {
   if (quest.status !== 'active') {
     throw new Error(`Quest ${quest.id} must be active to start (status: ${quest.status})`);
   }
   const state = getState();
-  if (quest.playerId !== PRACTICE_PLAYER_ID) state.active.delete(PRACTICE_PLAYER_ID);
   state.active.set(quest.playerId, {
     quest: { ...quest },
     verifiers: createVerifiers(quest.type),
@@ -113,11 +110,8 @@ export function clearActiveQuest(playerId: string): void {
   if (state.currentPlayerId === playerId) state.currentPlayerId = null;
 }
 
-function currentEntry(state: RouterState): ActiveEntry {
-  const current = state.currentPlayerId ? state.active.get(state.currentPlayerId) : undefined;
-  if (current) return current;
-  setActiveQuest(practiceQuest());
-  return state.active.get(PRACTICE_PLAYER_ID) as ActiveEntry;
+function currentEntry(state: RouterState): ActiveEntry | undefined {
+  return state.currentPlayerId ? state.active.get(state.currentPlayerId) : undefined;
 }
 
 function applyRep(state: RouterState, entry: ActiveEntry, source: Source): void {
@@ -132,7 +126,7 @@ function applyRep(state: RouterState, entry: ActiveEntry, source: Source): void 
 
   if (quest.progress < quest.target) return;
   clearActiveQuest(playerId);
-  publish({ type: 'quest.complete', quest: { ...quest, status: 'done' }, xpGained: quest.xp });
+  state.onComplete({ ...quest, status: 'done' });
 }
 
 function handle(state: RouterState, playerId: string, event: VerifierEvent, source: Source): void {
@@ -149,6 +143,7 @@ function handle(state: RouterState, playerId: string, event: VerifierEvent, sour
 export function routeReading(reading: Reading): void {
   const state = getState();
   const entry = currentEntry(state);
+  if (!entry) return; // no quest started: readings only feed the live `reading` stream
   const verifier = entry.verifiers[reading.source];
   if (!verifier) return; // this source can't verify this quest type
   for (const event of verifier.push(reading)) {
