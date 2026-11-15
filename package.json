@@ -9,7 +9,8 @@
     "lint": "eslint",
     "sim": "tsx bridge/simulator.ts",
     "test": "vitest run",
-    "bridge": "tsx bridge/serial.ts"
+    "bridge": "tsx bridge/serial.ts",
+    "demo:reset": "tsx scripts/demo-reset.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

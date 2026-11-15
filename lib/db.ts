@@ -8,6 +8,7 @@
  * so the demo runs offline. logEvent is fire-and-forget and never throws.
  */
 import { Pool, type QueryResultRow } from 'pg';
+import { DEMO_PLAYER_ID_PATTERN } from './demo';
 import { PlayerSchema, StatSchema, type Player, type Stat } from './schemas';
 
 const CONNECT_TIMEOUT_MS = 3_000;
@@ -203,6 +204,35 @@ export function logEvent(event: GameEvent): void {
       if (!warnedLogFailure) console.error('[db] logEvent failed:', error instanceof Error ? error.message : error);
       warnedLogFailure = true;
     });
+}
+
+// ── Demo reset ──────────────────────────────────────────────────────────────
+
+export interface DemoDeleteResult {
+  players: number;
+  events: number;
+}
+
+/**
+ * Deletes ONLY test/demo players (ids matching DEMO_PLAYER_ID_PATTERN) and their events,
+ * in one transaction. Null when the DB is not configured.
+ */
+export async function deleteDemoPlayers(): Promise<DemoDeleteResult | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const events = await client.query('DELETE FROM events WHERE player_id ~* $1', [DEMO_PLAYER_ID_PATTERN]);
+    const players = await client.query('DELETE FROM players WHERE id ~* $1', [DEMO_PLAYER_ID_PATTERN]);
+    await client.query('COMMIT');
+    return { players: players.rowCount ?? 0, events: events.rowCount ?? 0 };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // ── Reads for the dashboard ─────────────────────────────────────────────────

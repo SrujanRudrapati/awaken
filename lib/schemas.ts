@@ -45,7 +45,8 @@ export type Difficulty = z.infer<typeof DifficultySchema>;
 export const QuestKindSchema = z.enum(['daily', 'manual', 'emergency', 'penalty']);
 export type QuestKind = z.infer<typeof QuestKindSchema>;
 
-export const QuestStatusSchema = z.enum(['active', 'done', 'failed']);
+/** cancelled = switched away from (no penalty); failed = missed (Penalty Zone). */
+export const QuestStatusSchema = z.enum(['active', 'done', 'failed', 'cancelled']);
 export type QuestStatus = z.infer<typeof QuestStatusSchema>;
 
 const Id = z.string().min(1);

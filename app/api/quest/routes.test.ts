@@ -77,7 +77,14 @@ describe('quest API routes', () => {
     expect(res.status).toBe(404);
   });
 
-  it('POST /api/cron/daily requires the bearer secret when CRON_SECRET is set', async () => {
+  it('POST /api/cron/daily is closed when CRON_SECRET is unset', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect((await cronDaily(post({}, { authorization: 'Bearer ' }))).status).toBe(401);
+    expect(engine.dailyDrop).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/cron/daily requires the bearer secret', async () => {
     vi.mocked(engine.dailyDrop).mockResolvedValue({ a: [{}, {}] } as never);
     process.env.CRON_SECRET = 's3cret';
 

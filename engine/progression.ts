@@ -16,6 +16,12 @@ export const RANK_THRESHOLDS: readonly (readonly [Rank, number])[] = [
 
 export const XP_PER_LEVEL = 50;
 
+/** XP still needed to reach the next rank (0 at S). Used by demo mode's guaranteed first rank-up. */
+export function demoRankUpXp(xp: number): number {
+  const next = [...RANK_THRESHOLDS].reverse().find(([, min]) => min > xp);
+  return next ? next[1] - xp : 0;
+}
+
 export function rankForXp(xp: number): Rank {
   return RANK_THRESHOLDS.find(([, min]) => xp >= min)?.[0] ?? 'E';
 }

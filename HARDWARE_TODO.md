@@ -35,3 +35,33 @@ real-world checks still to do, in plan order. Tick them off as you go.
       set `APP_URL=http://<app-laptop-ip>:3000` on the bridge laptop and `DEVICE_URL=http://<bridge-laptop-ip>:3001` on the app laptop.
 
 No hardware? `SERIAL_PORT=mock npm run bridge` runs a fake Home Base (pad push-ups every 1.5 s, logs received commands).
+
+---
+
+## Phase 7 — Emergency quest on the real pad
+
+Setup: `npm run dev` + `npm run bridge` (real `SERIAL_PORT`), `DEMO_MODE=1` in `.env.local`
+(restart `npm run dev` after changing it). Start clean: `npm run demo:reset`.
+
+- [ ] Create a fresh demo player (ids must start with `demo-` / `test-` so reset can remove them):
+  ```bash
+  curl -X POST localhost:3000/api/player -H 'content-type: application/json' -d '{"name":"Jin","id":"demo-jin"}'
+  curl -X POST localhost:3000/api/quest/emergency -H 'content-type: application/json' -d '{"playerId":"demo-jin"}'
+  ```
+  Expect: alarm buzz, display shows `  30` and counts down once per second. Response `quest.xp` = **100** (demo bonus).
+- [ ] Do 10 pad push-ups inside 30 s → display shows the rep count, then `BUZZ:chime` + `LVUP`, ~2 s later `RK-D`.
+      `curl localhost:3000/api/player/demo-jin` → `rank: "D"`, `xp: 100`.
+- [ ] Second emergency for the same player → `quest.xp` = 40 (bonus is first-time only). Let it run out:
+      alarm + `FAIL` on the display, a `[PENALTY] Push-ups` quest (15 reps) appears in `/api/quests/demo-jin`.
+- [ ] Cancel path: start an emergency, then start any other sensor quest
+      (`POST /api/quest/start {"playerId":"demo-jin","type":"squat"}`) → the emergency shows status
+      **`cancelled`** (not `failed`), no alarm, no penalty quest.
+- [ ] `DEMO_MODE` unset (restart dev) + `npm run demo:reset` → new player's emergency is worth 40 XP (stays E).
+- [ ] `npm run demo:reset` → `demo-jin` is gone from `/api/leaderboard` and from Tiger (`select * from players`);
+      any real player is still there.
+
+**Auth checks** (should all be 401):
+```bash
+curl -i -X POST localhost:3000/api/cron/daily                          # no CRON_SECRET bearer
+curl -i -X POST localhost:3000/api/demo/reset                          # no CRON_SECRET bearer
+```

@@ -28,6 +28,7 @@ import {
   getPlayer,
   getQuest,
   listQuests,
+  purgePlayers,
   resetEngine,
   startQuest,
   sweepExpired,
@@ -236,6 +237,24 @@ describe('quest engine', () => {
     expect(getActiveQuest('p1')?.id).toBe(reps.id);
   });
 
+  it('purgePlayers removes only matching players, their quests, countdowns and sensor focus', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await createPlayer({ name: 'Demo', id: 'demo-1' });
+    await createPlayer({ name: 'Real', id: 'real' });
+    const demoQuest = await emergencyQuest('demo-1');
+    const realQuest = await startQuest('real', { type: 'squat' });
+
+    expect(purgePlayers((id) => id.startsWith('demo-'))).toBe(1);
+    await vi.advanceTimersByTimeAsync(EMERGENCY_SECONDS * 1_000 + 1_000);
+
+    expect(await getPlayer('demo-1')).toBeNull();
+    expect(getQuest(demoQuest.id)).toBeUndefined();
+    expect(getActiveQuest('demo-1')).toBeUndefined();
+    expect(ofType('penalty')).toHaveLength(0); // countdown stopped, no ghost failure
+    expect(await getPlayer('real')).not.toBeNull();
+    expect(getQuest(realQuest.id)?.status).toBe('active');
+  });
+
   describe('emergency quest', () => {
     beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 
@@ -285,9 +304,45 @@ describe('quest engine', () => {
       await startQuest('b', { type: 'pushup' });
       await vi.advanceTimersByTimeAsync(EMERGENCY_SECONDS * 1_000 + 1_000);
 
-      expect(getQuest(emergency.id)?.status).toBe('failed');
+      expect(getQuest(emergency.id)?.status).toBe('cancelled');
       expect(ofType('penalty')).toHaveLength(0);
       expect(sendAll).not.toHaveBeenCalledWith(['BUZZ:alarm', 'SEG:FAIL']);
+    });
+
+    describe('demo mode', () => {
+      afterEach(() => {
+        delete process.env.DEMO_MODE;
+      });
+
+      it("DEMO_MODE=1: a new player's first emergency ranks them up E→D", async () => {
+        process.env.DEMO_MODE = '1';
+        await createPlayer({ name: 'Jin', id: 'demo-1' });
+
+        const quest = await emergencyQuest('demo-1');
+        pushups(10).forEach(routeReading);
+        await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('done'));
+
+        expect(quest.xp).toBe(100);
+        expect(await getPlayer('demo-1')).toMatchObject({ rank: 'D', xp: 100 });
+        expect(ofType('levelup')).toEqual([expect.objectContaining({ fromRank: 'E', toRank: 'D' })]);
+      });
+
+      it('DEMO_MODE=1: only the first emergency gets the bonus', async () => {
+        process.env.DEMO_MODE = '1';
+        await createPlayer({ name: 'Jin', id: 'demo-1' });
+        await emergencyQuest('demo-1');
+        await vi.advanceTimersByTimeAsync(EMERGENCY_SECONDS * 1_000 + 1_000);
+
+        const second = await emergencyQuest('demo-1');
+
+        expect(second.xp).toBe(40);
+      });
+
+      it('normal mode keeps the balanced emergency XP', async () => {
+        await createPlayer({ name: 'Jin', id: 'p1' });
+
+        expect((await emergencyQuest('p1')).xp).toBe(40);
+      });
     });
 
     it('a failed emergency gives a 15-rep penalty quest, not 40', async () => {

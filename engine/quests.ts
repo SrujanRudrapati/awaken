@@ -18,6 +18,7 @@ import {
   QUEST_RULES,
   defaultTitle,
   endOfDay,
+  demoRankUpXp,
   levelForXp,
   rankForXp,
   rankSegment,
@@ -128,6 +129,25 @@ export async function createPlayer(input: { name: string; id?: string }): Promis
   return savePlayer({ id, name: input.name, rank: 'E', level: 1, xp: 0, stats: zeroStats(), penalty: false });
 }
 
+/**
+ * Forgets in-memory players matching `shouldPurge`, with their quests, countdowns and
+ * sensor focus (no events published: the players are gone). Returns how many were removed.
+ */
+export function purgePlayers(shouldPurge: (playerId: string) => boolean): number {
+  const state = getState();
+  for (const quest of [...state.quests.values()]) {
+    if (!shouldPurge(quest.playerId)) continue;
+    stopQuest(quest);
+    state.quests.delete(quest.id);
+  }
+  const ids = [...state.players.keys()].filter(shouldPurge);
+  ids.forEach((id) => {
+    clearActiveQuest(id);
+    state.players.delete(id);
+  });
+  return ids.length;
+}
+
 /** Players the engine holds in memory (fresher than Tiger Data). */
 export function listPlayersInMemory(): Player[] {
   return [...getState().players.values()];
@@ -153,7 +173,7 @@ export function getQuest(questId: string): Quest | undefined {
 
 /** All of a player's quests, active first, newest first. */
 export function listQuests(playerId: string): Quest[] {
-  const order: Record<Quest['status'], number> = { active: 0, done: 1, failed: 2 };
+  const order: Record<Quest['status'], number> = { active: 0, done: 1, failed: 2, cancelled: 3 };
   return [...getState().quests.values()]
     .filter((q) => q.playerId === playerId)
     .map(withLiveProgress)
@@ -215,7 +235,7 @@ function cancelOtherEmergencies(keepId: string): void {
     const quest = getState().quests.get(questId);
     if (!quest || quest.id === keepId || quest.status !== 'active') continue;
     stopQuest(quest);
-    const cancelled = storeQuest({ ...withLiveProgress(quest), status: 'failed' });
+    const cancelled = storeQuest({ ...withLiveProgress(quest), status: 'cancelled' });
     publish({ type: 'quest.update', quest: cancelled });
   }
 }
@@ -407,25 +427,32 @@ function activeEmergency(playerId: string): Quest | undefined {
   return listQuests(playerId).find((q) => q.status === 'active' && q.kind === 'emergency' && getState().timers.has(q.id));
 }
 
-/** 10 reps in 30 s, counting down on the Home Base display. Missing it = penalty. Idempotent while running. */
+/** DEMO_MODE=1: a brand-new player's first emergency quest is worth a rank-up (stage demo). */
+export function isDemoMode(): boolean {
+  return process.env.DEMO_MODE === '1';
+}
+
+/**
+ * 10 reps in 30 s, counting down on the Home Base display. Missing it = penalty. Idempotent while running.
+ * In demo mode an E-rank player's first emergency pays enough XP to reach D.
+ */
 export async function emergencyQuest(playerId: string, type: QuestType = 'pushup'): Promise<Quest> {
-  await requirePlayer(playerId);
+  const player = await requirePlayer(playerId);
   const running = activeEmergency(playerId);
   if (running) return running;
 
+  const brandNew = player.rank === 'E' && !listQuests(playerId).some((q) => q.kind === 'emergency');
   const deadline = new Date(Date.now() + EMERGENCY_SECONDS * 1_000);
-  const quest = launch(
-    storeQuest(
-      buildQuest(playerId, {
-        type,
-        difficulty: 'hard',
-        target: EMERGENCY_TARGET,
-        title: `[EMERGENCY] ${EMERGENCY_TARGET} ${QUEST_RULES[type].title} in ${EMERGENCY_SECONDS} s`,
-        deadline,
-        kind: 'emergency',
-      }),
-    ),
-  );
+  const built = buildQuest(playerId, {
+    type,
+    difficulty: 'hard',
+    target: EMERGENCY_TARGET,
+    title: `[EMERGENCY] ${EMERGENCY_TARGET} ${QUEST_RULES[type].title} in ${EMERGENCY_SECONDS} s`,
+    deadline,
+    kind: 'emergency',
+  });
+  const xp = isDemoMode() && brandNew ? Math.max(built.xp, demoRankUpXp(player.xp)) : built.xp;
+  const quest = launch(storeQuest({ ...built, xp }));
   void sendAll(['BUZZ:alarm', segNumber(EMERGENCY_SECONDS)]);
 
   const timer = setInterval(() => {

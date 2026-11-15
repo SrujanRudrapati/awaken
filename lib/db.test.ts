@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const queryMock = vi.fn();
+const clientQuery = vi.fn();
+const release = vi.fn();
 const poolOptions: unknown[] = [];
 vi.mock('pg', () => ({
   Pool: class {
@@ -9,12 +11,14 @@ vi.mock('pg', () => ({
     }
     query = queryMock;
     on = vi.fn();
+    connect = vi.fn(async () => ({ query: clientQuery, release }));
   },
 }));
 
 import type { Player } from './schemas';
 import {
   connectionStringWithoutSslMode,
+  deleteDemoPlayers,
   getPlayer,
   leaderboard,
   logEvent,
@@ -145,5 +149,42 @@ describe('db', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(rowToPlayer({ ...row, rank: 'Z' })).toBeNull();
     error.mockRestore();
+  });
+
+  describe('deleteDemoPlayers', () => {
+    beforeEach(() => {
+      clientQuery.mockReset();
+      release.mockReset();
+    });
+
+    it('deletes only demo/test ids (events then players) in one transaction', async () => {
+      clientQuery.mockResolvedValueOnce({}).mockResolvedValueOnce({ rowCount: 7 }).mockResolvedValueOnce({ rowCount: 2 }).mockResolvedValueOnce({});
+
+      expect(await deleteDemoPlayers()).toEqual({ players: 2, events: 7 });
+
+      const sql = clientQuery.mock.calls.map(([q]) => String(q));
+      expect(sql).toEqual([
+        'BEGIN',
+        'DELETE FROM events WHERE player_id ~* $1',
+        'DELETE FROM players WHERE id ~* $1',
+        'COMMIT',
+      ]);
+      expect(clientQuery.mock.calls[1][1]).toEqual(['^(demo|test)[-_]']);
+      expect(release).toHaveBeenCalled();
+    });
+
+    it('rolls back and rethrows on failure', async () => {
+      clientQuery.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce({});
+
+      await expect(deleteDemoPlayers()).rejects.toThrow('boom');
+      expect(clientQuery).toHaveBeenLastCalledWith('ROLLBACK');
+      expect(release).toHaveBeenCalled();
+    });
+
+    it('is a no-op without TIGER_DATABASE_URL', async () => {
+      delete process.env.TIGER_DATABASE_URL;
+      resetDb();
+      expect(await deleteDemoPlayers()).toBeNull();
+    });
   });
 });
