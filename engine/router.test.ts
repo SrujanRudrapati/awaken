@@ -1,6 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../lib/db', () => ({ logEvent: vi.fn() }));
+
 import { PUSHUP_REP_MS, SQUAT_REP_MS, waveform } from '../bridge/simulator';
 import { subscribe } from '../lib/bus';
+import { logEvent } from '../lib/db';
 import type { Quest, Reading, StreamEvent } from '../lib/schemas';
 import {
   PRACTICE_PLAYER_ID,
@@ -39,6 +43,7 @@ describe('router', () => {
   let off: () => void;
 
   beforeEach(() => {
+    vi.mocked(logEvent).mockClear();
     resetRouter();
     events = [];
     off = subscribe((e) => events.push(e));
@@ -189,5 +194,16 @@ describe('router', () => {
     setActiveQuest(quest());
 
     expect(getActiveQuest(PRACTICE_PLAYER_ID)).toBeUndefined();
+  });
+
+  it('logs verified reps and rejected reps to Tiger with their source', () => {
+    setActiveQuest(quest({ type: 'squat', target: 10 }));
+
+    squats(4).forEach(routeReading);
+
+    const kinds = vi.mocked(logEvent).mock.calls.map(([e]) => `${e.kind}:${e.verified}:${e.source}`);
+    expect(kinds).toEqual([
+      'rep:true:phone', 'rep:true:phone', 'rep:true:phone', 'rep.rejected:false:phone',
+    ]);
   });
 });

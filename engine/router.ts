@@ -11,6 +11,7 @@
  * State lives on globalThis: Next bundles each route separately and hot-reloads modules.
  */
 import { publish } from '../lib/bus';
+import { logEvent } from '../lib/db';
 import type { Quest, QuestType, Reading, Source } from '../lib/schemas';
 import { AccelRepCounter, type AccelExercise } from './verifiers/accelReps';
 import { PadPushupCounter } from './verifiers/padPushup';
@@ -119,8 +120,9 @@ function currentEntry(state: RouterState): ActiveEntry {
   return state.active.get(PRACTICE_PLAYER_ID) as ActiveEntry;
 }
 
-function applyRep(state: RouterState, entry: ActiveEntry): void {
+function applyRep(state: RouterState, entry: ActiveEntry, source: Source): void {
   const { id: questId, playerId } = entry.quest;
+  logEvent({ playerId, kind: 'rep', stat: entry.quest.stat, value: 1, verified: true, source });
   const quest: Quest = { ...entry.quest, progress: entry.quest.progress + 1 };
   state.active.set(playerId, { ...entry, quest });
 
@@ -133,13 +135,14 @@ function applyRep(state: RouterState, entry: ActiveEntry): void {
   publish({ type: 'quest.complete', quest: { ...quest, status: 'done' }, xpGained: quest.xp });
 }
 
-function handle(state: RouterState, playerId: string, event: VerifierEvent): void {
+function handle(state: RouterState, playerId: string, event: VerifierEvent, source: Source): void {
   const entry = state.active.get(playerId);
   if (!entry) return; // quest completed earlier in this batch of events
   if (event.type === 'rep') {
-    applyRep(state, entry);
+    applyRep(state, entry, source);
     return;
   }
+  logEvent({ playerId, kind: 'rep.rejected', stat: entry.quest.stat, value: 1, verified: false, source });
   publish({ type: 'rep.rejected', playerId, questId: entry.quest.id, reason: event.reason });
 }
 
@@ -149,6 +152,6 @@ export function routeReading(reading: Reading): void {
   const verifier = entry.verifiers[reading.source];
   if (!verifier) return; // this source can't verify this quest type
   for (const event of verifier.push(reading)) {
-    handle(state, entry.quest.playerId, event);
+    handle(state, entry.quest.playerId, event, reading.source);
   }
 }
