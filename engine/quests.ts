@@ -27,7 +27,14 @@ import {
   xpFor,
   type QuestTemplate,
 } from './progression';
-import { clearActiveQuest, getActiveQuest, hasSensorVerifier, setActiveQuest, setCompletionHandler } from './router';
+import {
+  clearActiveQuest,
+  getActiveQuest,
+  hasSensorVerifier,
+  setActiveQuest,
+  setCompletionHandler,
+  setFailureHandler,
+} from './router';
 
 export const EMERGENCY_TARGET = 10;
 export const EMERGENCY_SECONDS = 30;
@@ -35,6 +42,8 @@ const LEVELUP_RANK_DELAY_MS = 2_000;
 const COUNTDOWN_TICK_MS = 1_000;
 /** Longest we wait on Tiger Data for a player lookup before treating it as unknown. */
 const DB_LOOKUP_TIMEOUT_MS = 500;
+/** DEMO_MODE: Phone Jail quests default to 20 s so the stage demo doesn't take 25 minutes. */
+export const DEMO_JAIL_SECONDS = 20;
 /** A failed hard / custom-target quest comes back this much bigger. */
 const PENALTY_TARGET_FACTOR = 1.5;
 
@@ -203,7 +212,8 @@ export interface NewQuestInput {
 
 function buildQuest(playerId: string, input: NewQuestInput): Quest {
   const difficulty = input.difficulty ?? 'normal';
-  const target = input.target ?? QUEST_RULES[input.type].target[difficulty];
+  const demoJail = isDemoMode() && input.type === 'jail' ? DEMO_JAIL_SECONDS : undefined;
+  const target = input.target ?? demoJail ?? QUEST_RULES[input.type].target[difficulty];
   return {
     id: randomUUID(),
     playerId,
@@ -433,18 +443,37 @@ function onSensorComplete(quest: Quest): void {
     publish({ type: 'quest.complete', quest, xpGained: quest.xp }); // not an engine quest
     return;
   }
-  awardQuest(quest.playerId, quest.id).catch((error: unknown) => {
-    console.error(`[engine] completing ${quest.id} failed:`, error instanceof Error ? error.message : error);
-    // Keep the reps: a resume (POST /api/quest/start {questId}) can still finish it.
-    const stored = getState().quests.get(quest.id);
-    if (stored?.status !== 'active') return;
-    const kept = storeQuest({ ...stored, progress: quest.progress });
-    publish({ type: 'quest.update', quest: kept });
+  awardQuest(quest.playerId, quest.id)
+    .then(() => {
+      if (quest.type === 'jail') issueFocusQuiz(quest.playerId);
+    })
+    .catch((error: unknown) => {
+      console.error(`[engine] completing ${quest.id} failed:`, error instanceof Error ? error.message : error);
+      // Keep the reps: a resume (POST /api/quest/start {questId}) can still finish it.
+      const stored = getState().quests.get(quest.id);
+      if (stored?.status !== 'active') return;
+      const kept = storeQuest({ ...stored, progress: quest.progress });
+      publish({ type: 'quest.update', quest: kept });
+    });
+}
+
+/** After a Phone Jail session: a quiz quest proves the focus was real (Phase 9 quiz agent grades it). */
+function issueFocusQuiz(playerId: string): void {
+  const quiz = storeQuest(buildQuest(playerId, { type: 'quiz', title: '[FOCUS QUIZ] Prove what you studied', kind: 'manual' }));
+  publish({ type: 'quest.update', quest: quiz });
+}
+
+/** Router hook: a timer verifier failed its quest (e.g. phone pulled from the jail early). */
+function onSensorFail(quest: Quest, reason: string): void {
+  if (!getState().quests.has(quest.id)) return; // not an engine quest
+  failQuest(quest.playerId, quest.id, reason).catch((error: unknown) => {
+    console.error(`[engine] failing ${quest.id} failed:`, error instanceof Error ? error.message : error);
   });
 }
 
 function registerWithRouter(): void {
   setCompletionHandler(onSensorComplete);
+  setFailureHandler(onSensorFail);
 }
 registerWithRouter();
 

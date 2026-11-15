@@ -1,13 +1,15 @@
 /**
  * Sensor simulator — never blocked by hardware.
  *
- *   npm run sim [pushup|squat|jail|idle]
+ *   npm run sim [pushup|squat|jail|meditate|lightsout|idle]
  *
  *   pushup  Home Base pad: chest presses the pad once per 1.5 s, with one-sample contact
  *           bounce on every press and release (the verifier must debounce it).
  *   squat   iPhone armband (source 'phone'): ay swings −1 g → −0.2 g once per 2 s;
  *           every 4th squat only reaches half depth.
  *   jail    Home Base IR: phone in the jail for 30 s, then removed.
+ *   meditate  Button held in a quiet room; a 3 s noise burst at 20 s (breaks the 2 s grace once).
+ *   lightsout Room lit (500) for 5 s, then dark (10).
  *   idle    Home Base at rest.
  *
  * POSTs one Reading every 100 ms to `${APP_URL}/api/readings`.
@@ -16,7 +18,7 @@
  */
 import { ReadingSchema, type Bit, type Reading } from '../lib/schemas';
 
-export const MODES = ['pushup', 'squat', 'jail', 'idle'] as const;
+export const MODES = ['pushup', 'squat', 'jail', 'meditate', 'lightsout', 'idle'] as const;
 export type Mode = (typeof MODES)[number];
 
 export const SAMPLE_MS = 100;
@@ -33,6 +35,12 @@ export const SQUAT_SHALLOW_EVERY = 4;
 
 // Phone Jail: jail=1 for 30 s, then 0.
 export const JAIL_DURATION_MS = 30_000;
+
+// Meditate: quiet room (snd 100) for 1 s of calibration, then the button is held; a loud burst at 20–23 s.
+export const MEDITATE_PRESS_MS = 1_000;
+export const MEDITATE_NOISE_MS = [20_000, 23_000] as const;
+// Lights out: lit for 5 s, then dark.
+export const LIGHTS_OFF_MS = 5_000;
 
 const REQUEST_TIMEOUT_MS = 1_000;
 const DEFAULT_APP_URL = 'http://localhost:3000';
@@ -83,6 +91,12 @@ export function readingAt(mode: Mode, tMs: number): Reading {
       return squatReading(tMs);
     case 'jail':
       return { ...HOMEBASE_READING, t: tMs, jail: tMs < JAIL_DURATION_MS ? 1 : 0 };
+    case 'meditate': {
+      const noisy = tMs >= MEDITATE_NOISE_MS[0] && tMs < MEDITATE_NOISE_MS[1];
+      return { ...HOMEBASE_READING, t: tMs, btn: tMs >= MEDITATE_PRESS_MS ? 1 : 0, snd: noisy ? 600 : 100 };
+    }
+    case 'lightsout':
+      return { ...HOMEBASE_READING, t: tMs, light: tMs < LIGHTS_OFF_MS ? 500 : 10 };
     case 'idle':
       return { ...HOMEBASE_READING, t: tMs };
   }
@@ -113,6 +127,8 @@ function eventBetween(mode: Mode, prevT: number, t: number): string | null {
     const shallow = squatDepth(done) < SQUAT_FULL_DEPTH_G;
     return `phone squat #${done} sent — ${shallow ? 'SHALLOW' : 'full'}${done <= 2 ? ' (calibration)' : ''}`;
   }
+  if (mode === 'meditate' && prevT < MEDITATE_NOISE_MS[0] && t >= MEDITATE_NOISE_MS[0]) return 'noise burst (3 s)';
+  if (mode === 'lightsout' && prevT < LIGHTS_OFF_MS && t >= LIGHTS_OFF_MS) return 'lights off (light=10)';
   if (mode === 'jail' && prevT < JAIL_DURATION_MS && t >= JAIL_DURATION_MS) {
     return `phone removed (jail=0) after ${JAIL_DURATION_MS / 1000} s`;
   }

@@ -13,12 +13,16 @@
  */
 import { publish } from '../lib/bus';
 import { logEvent } from '../lib/db';
-import type { Quest, QuestType, Reading, Source } from '../lib/schemas';
+import { send } from '../lib/device';
+import type { DeviceCommand, Quest, QuestType, Reading, Source } from '../lib/schemas';
 import { AccelRepCounter, type AccelExercise } from './verifiers/accelReps';
+import { JailVerifier } from './verifiers/jail';
+import { LightsOutVerifier } from './verifiers/lightsout';
+import { MeditateVerifier } from './verifiers/meditate';
 import { PadPushupCounter } from './verifiers/padPushup';
-import type { Verifier, VerifierEvent } from './verifiers/types';
+import type { Verifier, VerifierEvent, VerifierQuest } from './verifiers/types';
 
-type VerifierFactory = () => Verifier;
+type VerifierFactory = (quest: VerifierQuest) => Verifier;
 type SourceVerifiers = Partial<Record<Source, Verifier>>;
 
 /** The Watch app counts these reps on-device and posts them to /api/watch; raw readings add nothing. */
@@ -36,15 +40,26 @@ const VERIFIERS: Partial<Record<QuestType, Partial<Record<Source, VerifierFactor
   jumpingjack: accel('jumpingjack'),
   situp: accel('situp'),
   punch: { watch: watchCounted },
-  // jail / meditate / lightsout arrive in Phase 8
+  jail: { homebase: (quest) => new JailVerifier(quest) },
+  meditate: { homebase: (quest) => new MeditateVerifier(quest) },
+  lightsout: { homebase: () => new LightsOutVerifier() },
 };
 
 /** Called when a sensor quest reaches its target. The quest engine awards XP and publishes. */
 export type CompletionHandler = (quest: Quest) => void;
 
+/** Called when a timer verifier fails its quest (e.g. phone pulled from the jail). The engine applies the penalty. */
+export type FailureHandler = (quest: Quest, reason: string) => void;
+
 /** Default (no engine loaded, e.g. router tests): just announce the completion. */
 const publishCompletion: CompletionHandler = (quest) =>
   publish({ type: 'quest.complete', quest, xpGained: quest.xp });
+
+/** Default failure: announce the failed quest. */
+const publishFailure: FailureHandler = (quest, reason) => {
+  publish({ type: 'quest.update', quest: { ...quest, status: 'failed' } });
+  publish({ type: 'penalty', playerId: quest.playerId, questId: quest.id, reason });
+};
 
 interface ActiveEntry {
   quest: Quest;
@@ -52,18 +67,21 @@ interface ActiveEntry {
   verifiers: SourceVerifiers;
   /** Reps the Watch has reported for this quest so far (its count is cumulative). */
   watchReps: number;
+  /** The Phone Jail servo is locked for this quest (must be unlocked if the quest loses focus). */
+  locked: boolean;
 }
 
 interface RouterState {
   active: Map<string, ActiveEntry>;
   currentPlayerId: string | null;
   onComplete: CompletionHandler;
+  onFail: FailureHandler;
 }
 
 const globalForRouter = globalThis as typeof globalThis & { __awakenRouter?: RouterState };
 
 function freshState(): RouterState {
-  return { active: new Map(), currentPlayerId: null, onComplete: publishCompletion };
+  return { active: new Map(), currentPlayerId: null, onComplete: publishCompletion, onFail: publishFailure };
 }
 
 function getState(): RouterState {
@@ -81,15 +99,19 @@ export function setCompletionHandler(handler: CompletionHandler): void {
   getState().onComplete = handler;
 }
 
+export function setFailureHandler(handler: FailureHandler): void {
+  getState().onFail = handler;
+}
+
 /** True if some sensor source can count this quest type. */
 export function hasSensorVerifier(type: QuestType): boolean {
   return Object.keys(VERIFIERS[type] ?? {}).length > 0;
 }
 
-function createVerifiers(type: QuestType): SourceVerifiers {
-  const factories = VERIFIERS[type] ?? {};
+function createVerifiers(quest: Quest): SourceVerifiers {
+  const factories = VERIFIERS[quest.type] ?? {};
   return Object.fromEntries(
-    Object.entries(factories).map(([source, create]) => [source, create()]),
+    Object.entries(factories).map(([source, create]) => [source, create({ target: quest.target, progress: quest.progress })]),
   ) as SourceVerifiers;
 }
 
@@ -99,10 +121,13 @@ export function setActiveQuest(quest: Quest): void {
     throw new Error(`Quest ${quest.id} must be active to start (status: ${quest.status})`);
   }
   const state = getState();
+  releaseJail(state, state.currentPlayerId); // the old focus stops getting readings: never leave a phone locked
+  releaseJail(state, quest.playerId);
   state.active.set(quest.playerId, {
     quest: { ...quest },
-    verifiers: createVerifiers(quest.type),
+    verifiers: createVerifiers(quest),
     watchReps: 0,
+    locked: false,
   });
   state.currentPlayerId = quest.playerId;
 }
@@ -111,8 +136,17 @@ export function getActiveQuest(playerId: string): Quest | undefined {
   return getState().active.get(playerId)?.quest;
 }
 
+/** Sends UNLOCK if this player's active quest holds the Phone Jail locked. */
+function releaseJail(state: RouterState, playerId: string | null): void {
+  const entry = playerId ? state.active.get(playerId) : undefined;
+  if (!entry?.locked) return;
+  state.active.set(entry.quest.playerId, { ...entry, locked: false });
+  void send('UNLOCK');
+}
+
 export function clearActiveQuest(playerId: string): void {
   const state = getState();
+  releaseJail(state, playerId);
   state.active.delete(playerId);
   if (state.currentPlayerId === playerId) state.currentPlayerId = null;
 }
@@ -136,12 +170,43 @@ function applyRep(state: RouterState, entry: ActiveEntry, source: Source): void 
   state.onComplete({ ...quest, status: 'done' });
 }
 
+function applyProgress(state: RouterState, entry: ActiveEntry, value: number): void {
+  const quest: Quest = { ...entry.quest, progress: value };
+  state.active.set(quest.playerId, { ...entry, quest });
+  publish({ type: 'quest.update', quest });
+}
+
+function applyDevice(state: RouterState, entry: ActiveEntry, cmd: DeviceCommand): void {
+  if (cmd === 'LOCK' || cmd === 'UNLOCK') state.active.set(entry.quest.playerId, { ...entry, locked: cmd === 'LOCK' });
+  void send(cmd);
+}
+
+function finish(state: RouterState, entry: ActiveEntry, outcome: { done: true } | { done: false; reason: string }): void {
+  const { quest } = entry;
+  clearActiveQuest(quest.playerId);
+  if (outcome.done) state.onComplete({ ...quest, progress: quest.target, status: 'done' });
+  else state.onFail(quest, outcome.reason);
+}
+
 function handle(state: RouterState, playerId: string, event: VerifierEvent, source: Source): void {
   const entry = state.active.get(playerId);
   if (!entry) return; // quest completed earlier in this batch of events
-  if (event.type === 'rep') {
-    applyRep(state, entry, source);
-    return;
+  switch (event.type) {
+    case 'rep':
+      applyRep(state, entry, source);
+      return;
+    case 'progress':
+      applyProgress(state, entry, event.value);
+      return;
+    case 'device':
+      applyDevice(state, entry, event.cmd);
+      return;
+    case 'done':
+      finish(state, entry, { done: true });
+      return;
+    case 'fail':
+      finish(state, entry, { done: false, reason: event.reason });
+      return;
   }
   logEvent({ playerId, kind: 'rep.rejected', stat: entry.quest.stat, value: 1, verified: false, source });
   publish({ type: 'rep.rejected', playerId, questId: entry.quest.id, reason: event.reason });

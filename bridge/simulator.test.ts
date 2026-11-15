@@ -55,6 +55,6 @@ describe('simulator waveforms', () => {
   it('parseMode accepts known modes and rejects others', () => {
     expect(parseMode('squat')).toBe('squat');
     expect(parseMode(undefined)).toBe('idle');
-    expect(() => parseMode('burpee')).toThrow(/pushup\|squat\|jail\|idle/);
+    expect(() => parseMode('burpee')).toThrow(/pushup\|squat\|jail\|meditate\|lightsout\|idle/);
   });
 });

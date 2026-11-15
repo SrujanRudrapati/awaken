@@ -158,3 +158,28 @@ Punch quests can only be counted by the Watch.
 - [ ] Reach the target → blue `[QUEST COMPLETE]` overlay; on rank-up a gold `[LEVEL UP] Rank D` overlay.
 - [ ] Screen should stay on while streaming (wake lock). If it dims, set Auto-Lock to Never for the demo.
 - [ ] Arm push-ups from the phone: start a push-up quest, phone on the upper arm.
+
+---
+
+## Phase 8 — Phone Jail, Meditate, Lights out (Home Base)
+
+No hardware? `npm run sim jail | meditate | lightsout` exercises each verifier end to end.
+
+**Phone Jail** (IR D6 + servo D5). `DEMO_MODE=1` → jail quests default to **20 s**.
+- [ ] `POST /api/quest/start {"playerId":"demo-jin","type":"jail"}` → display idle until the phone goes in.
+- [ ] Put the phone in → servo **LOCKs**, display counts `  20` → `   1`.
+- [ ] Leave it → at 0: servo **UNLOCKs**, chime, quest done (+FOCUS), and a `[FOCUS QUIZ]` quest appears.
+- [ ] Again, but pull the phone out after ~5 s → **UNLOCK**, alarm, `FAIL`, Penalty Zone + a 30 s penalty jail quest.
+- [ ] Brief IR flicker (wave a finger through the beam < 1 s) must NOT fail it. If it does, the IR sensor
+      needs re-aiming; the grace is `FLICKER_GRACE_MS` in `engine/verifiers/jail.ts`.
+- [ ] Mid-lock, start a push-up quest from the dashboard → servo must UNLOCK (never leave a phone trapped).
+
+**Meditate** (button D2 + sound A0): first 1 s calibrates the room's quiet level — stay silent at the start.
+- [ ] Start `{"type":"meditate","target":30}` → hold the button; display counts down.
+- [ ] Release for < 2 s → keeps counting. Release for > 2 s → `rep.rejected "hold the button"`, timer pauses.
+- [ ] Clap/talk loudly > 2 s → `rep.rejected "too loud"`. If normal breathing triggers it, raise `SOUND_MARGIN`
+      in `engine/verifiers/meditate.ts` (default 60 of 1023).
+
+**Lights out** (light A1): first 1 s calibrates the lit room — start with the lights ON.
+- [ ] Start `{"type":"lightsout"}` → switch the lights off → after 2 s dark the display shows `DARK`, quest done.
+- [ ] A hand shadow over the sensor (< 2 s) must not complete it.

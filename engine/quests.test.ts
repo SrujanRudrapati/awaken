@@ -262,6 +262,53 @@ describe('quest engine', () => {
     expect(getQuest(realQuest.id)?.status).toBe('active');
   });
 
+  describe('Phone Jail', () => {
+    const jailReadings = (bit: 0 | 1, fromMs: number, toMs: number): Reading[] =>
+      Array.from({ length: (toMs - fromMs) / 100 }, (_, i) => ({ t: fromMs + i * 100, source: 'homebase' as const, jail: bit }));
+
+    afterEach(() => {
+      delete process.env.DEMO_MODE;
+    });
+
+    it('DEMO_MODE: 20 s jail locks, completes, unlocks, awards XP and issues a focus quiz', async () => {
+      process.env.DEMO_MODE = '1';
+      await createPlayer({ name: 'Jin', id: 'p1' });
+      const quest = await startQuest('p1', { type: 'jail' });
+      expect(quest.target).toBe(20);
+
+      jailReadings(1, 0, 20_500).forEach(routeReading);
+
+      await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('done'));
+      expect(send).toHaveBeenCalledWith('LOCK');
+      expect(send).toHaveBeenCalledWith('UNLOCK');
+      expect((await getPlayer('p1'))?.stats.FOCUS).toBe(1);
+      await vi.waitFor(() => expect(listQuests('p1').some((q) => q.type === 'quiz' && q.status === 'active')).toBe(true));
+    });
+
+    it('pulling the phone out early unlocks and sends the player to the Penalty Zone', async () => {
+      await createPlayer({ name: 'Jin', id: 'p1' });
+      const quest = await startQuest('p1', { type: 'jail', target: 60 });
+
+      [...jailReadings(1, 0, 5_000), ...jailReadings(0, 5_000, 7_000)].forEach(routeReading);
+
+      await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('failed'));
+      expect(send).toHaveBeenCalledWith('UNLOCK');
+      expect((await getPlayer('p1'))?.penalty).toBe(true);
+      expect(listQuests('p1').find((q) => q.kind === 'penalty')?.type).toBe('jail');
+    });
+
+    it('switching to another sensor quest mid-lock releases the jail', async () => {
+      await createPlayer({ name: 'Jin', id: 'p1' });
+      await startQuest('p1', { type: 'jail', target: 60 });
+      jailReadings(1, 0, 2_000).forEach(routeReading);
+      vi.mocked(send).mockClear();
+
+      await startQuest('p1', { type: 'pushup' });
+
+      expect(send).toHaveBeenCalledWith('UNLOCK');
+    });
+  });
+
   describe('emergency quest', () => {
     beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 

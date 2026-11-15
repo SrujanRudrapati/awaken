@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../lib/db', () => ({ logEvent: vi.fn() }));
+vi.mock('../lib/device', () => ({ send: vi.fn().mockResolvedValue(true) }));
 
 import { PUSHUP_REP_MS, SQUAT_REP_MS, waveform } from '../bridge/simulator';
 import { subscribe } from '../lib/bus';
