@@ -6,9 +6,13 @@ import type { DeviceCommand, Reading } from '../lib/schemas';
 import {
   MAX_BATCH,
   MAX_BUFFER,
+  NUDGE_MS,
   ReadingBatcher,
+  configCommands,
   connectSerial,
   createCommandServer,
+  failedAck,
+  isBootLine,
   parseCommandBody,
   parseLine,
   type CommandTarget,
@@ -158,7 +162,32 @@ describe('connectSerial (mock port)', () => {
     await vi.waitFor(() => expect(lines.length).toBeGreaterThan(1), { timeout: 3_000 });
 
     expect(lines[0]).toMatch(/^\{"t":0,/);
+    await vi.waitFor(
+      () => expect(log.mock.calls.flat().join('\n')).toContain('[fake home base] received LOCK'),
+      { timeout: 3_000 },
+    );
+    expect(NUDGE_MS).toBeLessThan(100); // the follow-up '\n' nudge must stay fast
     link.close();
     log.mockRestore();
+  });
+});
+
+describe('Home Base firmware lines', () => {
+  it('null (absent hardware) is treated as a missing field; extra fields are stripped', () => {
+    const reading = parseLine('{"t":2800,"pad":0,"btn":1,"light":749,"snd":673,"ax":0.98,"ay":-0.42,"az":-0.23,"jail":null,"servo":null}');
+    expect(reading).toEqual({ t: 2800, source: 'homebase', pad: 0, btn: 1, light: 749, snd: 673, ax: 0.98, ay: -0.42, az: -0.23 });
+    expect(parseLine('{"t":5,"ax":null,"ay":null,"az":null,"jail":1}')).toEqual({ t: 5, source: 'homebase', jail: 1 });
+  });
+
+  it('recognises boot banners and rejected commands', () => {
+    expect(isBootLine('{"boot":"homebase","fw":"oath-1","accel":true,"display":true}')).toBe(true);
+    expect(parseLine('{"boot":"homebase"}')).toBeNull();
+    expect(failedAck('{"ack":"LOCK","ok":false}')).toBe('LOCK');
+    expect(failedAck('{"ack":"SEG:OATH","ok":true}')).toBeNull();
+  });
+
+  it('optional servo/IR are enabled only by env', () => {
+    expect(configCommands({})).toEqual(['CFG:IR:0', 'CFG:SERVO:0']);
+    expect(configCommands({ HOMEBASE_IR: '1', HOMEBASE_SERVO: 'true' })).toEqual(['CFG:IR:1', 'CFG:SERVO:1']);
   });
 });

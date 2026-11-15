@@ -1,5 +1,5 @@
 /**
- * Lights out (light sensor A1): the room must go dark before the quest deadline.
+ * Lights out (light sensor A0): the room must go dark before the quest deadline.
  *
  * - The first BASELINE_SAMPLES light readings are the lit room (median) → threshold =
  *   max(MIN_DARK_THRESHOLD, baseline × DARK_FRACTION).

@@ -1,5 +1,5 @@
 /**
- * Push-up rep counter for the Home Base pad switch (D3): chest presses the pad at the bottom.
+ * Push-up rep counter for the Home Base pad / micro switch (D6): chest presses the pad at the bottom.
  *
  *   pad 0 ──▶ 1 (chest down) ──▶ 0 (back up) = 1 rep, counted on release.
  *

@@ -58,24 +58,34 @@ const AnalogSchema = z.number().min(0).max(1023);
 export const SourceSchema = z.enum(['homebase', 'phone', 'watch']);
 export type Source = z.infer<typeof SourceSchema>;
 
+/** Firmware reports absent hardware as `null`; treat it exactly like a missing field. */
+function dropNulls(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value;
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== null));
+}
+
 /**
  * One sample from any source. Every sensor field is optional — the Home Base sends
- * pad/jail/btn/light/snd(/accel), the phone and Watch send only accel.
- * Not strict: extra fields are stripped, not rejected. `source` defaults to 'homebase'
- * so raw firmware JSON is accepted as-is.
+ * pad/btn/light/snd/accel (+ jail when the IR sensor is fitted), the phone and Watch send
+ * only accel. `null` (absent hardware) is the same as missing. Not strict: extra fields
+ * (e.g. `servo`) are stripped, not rejected. `source` defaults to 'homebase' so raw
+ * firmware JSON is accepted as-is.
  */
-export const ReadingSchema = z.object({
-  t: z.number().min(0), // ms since boot / page load
-  source: SourceSchema.default('homebase'),
-  pad: BitSchema.optional(), // push-up pad switch (D3)
-  ax: z.number().optional(), // g
-  ay: z.number().optional(),
-  az: z.number().optional(),
-  jail: BitSchema.optional(), // IR: phone present in the jail (D6)
-  btn: BitSchema.optional(), // button (D2)
-  light: AnalogSchema.optional(), // A1
-  snd: AnalogSchema.optional(), // A0
-});
+export const ReadingSchema = z.preprocess(
+  dropNulls,
+  z.object({
+    t: z.number().min(0), // ms since boot / page load
+    source: SourceSchema.default('homebase'),
+    pad: BitSchema.optional(), // push-up pad / micro switch (D6)
+    ax: z.number().optional(), // g (MMA7660FC on I2C 0x4C, or phone/Watch)
+    ay: z.number().optional(),
+    az: z.number().optional(),
+    jail: BitSchema.optional(), // optional IR reflective (D7): phone present in the jail
+    btn: BitSchema.optional(), // button (D2)
+    light: AnalogSchema.optional(), // A0
+    snd: AnalogSchema.optional(), // A1, loudest sample in the 100 ms window
+  }),
+);
 export type Reading = z.infer<typeof ReadingSchema>;
 
 // ── Laptop → Home Base (one command per line) ───────────────────────────────
@@ -83,7 +93,7 @@ export type Reading = z.infer<typeof ReadingSchema>;
 export const BuzzSchema = z.enum(['alarm', 'chime', 'tick']);
 export type Buzz = z.infer<typeof BuzzSchema>;
 
-/** Grove 4-digit display shows exactly 4 characters. */
+/** The 4-char alphanumeric display (HT16K33, I2C 0x71) shows exactly 4 characters. */
 const SEG_PATTERN = /^SEG:[^\n\r]{4}$/;
 
 const SegCommandSchema = z
@@ -95,6 +105,8 @@ export const DeviceCommandSchema = z.union([
   z.literal('LOCK'),
   z.literal('UNLOCK'),
   z.templateLiteral(['BUZZ:', BuzzSchema]),
+  // Optional hardware on/off (servo D5, IR D7); the bridge sends these from env on connect.
+  z.enum(['CFG:IR:0', 'CFG:IR:1', 'CFG:SERVO:0', 'CFG:SERVO:1']),
 ]);
 export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 

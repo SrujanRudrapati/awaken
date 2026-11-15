@@ -97,10 +97,10 @@ Maritime agent (cron): midnight quest drop + Penalty Zone check + nightly Gate s
 ### Readings protocol (all sources → `POST /api/readings`, `ReadingSchema`)
 `{"t":ms,"source":"homebase"|"phone"|"watch","pad"?:0|1,"ax"?:g,"ay"?:g,"az"?:g,"jail"?:0|1,"btn"?:0|1,"light"?:0-1023,"snd"?:0-1023}`
 - Every sensor field is optional; unknown fields are stripped. `source` defaults to `homebase`.
-- Home Base (every 100 ms over serial): pad (push-up switch D3), jail (IR D6), btn (D2), snd (A0), light (A1), accel (I2C).
+- Home Base = Arduino UNO R4 WiFi + Grove shield (every 100 ms over serial, 115200): pad (micro switch D6), btn (D2), light (A0), snd (A1, 100 ms peak), accel (MMA7660FC, I2C 0x4C); optional jail (IR reflective D7) and servo (D5) report `null` when absent. Without IR, Phone Jail uses the light sensor covered by the phone (only while a jail vow is active). Firmware: `firmware/homebase`.
 - Phone / Watch: accelerationIncludingGravity in g (~30 Hz, batched).
 
-Laptop → Home Base (one per line, `DeviceCommandSchema`): `SEG:<4 chars>`, `LOCK`, `UNLOCK`, `BUZZ:<chime|alarm|tick>`. Servo lock D5, buzzer D4, 4-digit display I2C.
+Laptop → Home Base (one per line, `DeviceCommandSchema`): `SEG:<4 chars>`, `LOCK`, `UNLOCK`, `BUZZ:<chime|alarm|tick>`, `CFG:IR:0|1`, `CFG:SERVO:0|1`; each acked `{"ack":cmd,"ok":bool}`. Servo lock D5, buzzer D4, 4-char alphanumeric display (HT16K33, I2C 0x71).
 
 ### SSE events (backend → web app)
 `reading`, `rep`, `rep.rejected` (half-rep → "REP NOT COUNTED"), `quest.update`, `quest.complete`, `levelup`, `penalty`, `voice`. Payloads: `StreamEventSchema` in `lib/schemas.ts`.

@@ -24,6 +24,15 @@ export const MAX_BATCH = 5;
 export const MAX_BUFFER = 100;
 const FLUSH_MS = 200;
 const RECONNECT_MS = 2_000;
+/**
+ * UNO R4 WiFi quirks (its USB serial goes through an ESP32-S3 bridge), measured 2026-11-14:
+ * - the bridge holds the latest host→board write until another write arrives, so every
+ *   command is followed by a lone '\n' (ignored by the firmware) NUDGE_MS later;
+ * - nothing flows for ~3 s after the port opens, and a burst of commands sent in that window
+ *   wedged the board — so nothing is written until the first line from the board arrives.
+ */
+export const NUDGE_MS = 30;
+const READY_TIMEOUT_MS = 6_000;
 const POST_TIMEOUT_MS = 1_000;
 const MAX_BODY_BYTES = 1_024;
 const MOCK_PATH = '/dev/mock-homebase';
@@ -44,6 +53,26 @@ export function parseLine(line: string): Reading | null {
   } catch {
     return null;
   }
+}
+
+/** The firmware's boot banner (`{"boot":"homebase",...}`): the board just (re)started. */
+export function isBootLine(line: string): boolean {
+  return line.trim().startsWith('{"boot"');
+}
+
+/** A command acknowledgement the firmware rejected (`{"ack":"LOCK","ok":false}` = no servo). */
+export function failedAck(line: string): string | null {
+  const match = /^\{"ack":"([^"]*)","ok":false\}/.exec(line.trim());
+  return match ? match[1] : null;
+}
+
+/**
+ * Optional hardware is enabled from env, since a missing servo/IR can't be detected electrically:
+ * HOMEBASE_IR=1 (IR reflective on D7), HOMEBASE_SERVO=1 (servo on D5).
+ */
+export function configCommands(env: Record<string, string | undefined>): DeviceCommand[] {
+  const on = (value: string | undefined) => value === '1' || value === 'true';
+  return [on(env.HOMEBASE_IR) ? 'CFG:IR:1' : 'CFG:IR:0', on(env.HOMEBASE_SERVO) ? 'CFG:SERVO:1' : 'CFG:SERVO:0'];
 }
 
 // ── Batching ────────────────────────────────────────────────────────────────
@@ -179,19 +208,44 @@ export interface SerialLink extends CommandTarget {
   close(): void;
 }
 
-export function connectSerial(path: string, onLine: (line: string) => void): SerialLink {
+export function connectSerial(path: string, onLine: (line: string) => void, onReady?: () => void): SerialLink {
   const mock = path === 'mock';
   let port: AnyPort | null = null;
   let stopped = false;
   let warned = false;
+  let ready = false;
+  let readyWaiters: (() => void)[] = [];
+
+  const markReady = (): void => {
+    if (ready) return;
+    ready = true;
+    readyWaiters.forEach((wake) => wake());
+    readyWaiters = [];
+    onReady?.();
+  };
+
+  const waitReady = (): Promise<void> =>
+    ready
+      ? Promise.resolve()
+      : new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('Home Base not talking yet')), READY_TIMEOUT_MS);
+          readyWaiters.push(() => {
+            clearTimeout(timer);
+            resolve();
+          });
+        });
 
   const open = (): void => {
     if (stopped) return;
     const next: AnyPort = mock
       ? new SerialPortMock({ path: MOCK_PATH, baudRate: BAUD_RATE, autoOpen: false })
       : new SerialPort({ path, baudRate: BAUD_RATE, autoOpen: false });
-    next.pipe(new ReadlineParser({ delimiter: '\n' })).on('data', onLine);
+    next.pipe(new ReadlineParser({ delimiter: '\n' })).on('data', (line: string) => {
+      markReady();
+      onLine(line);
+    });
     next.on('close', () => {
+      ready = false;
       if (stopped) return;
       log(`serial ${path} closed — reconnecting`);
       setTimeout(open, RECONNECT_MS);
@@ -215,11 +269,15 @@ export function connectSerial(path: string, onLine: (line: string) => void): Ser
 
   return {
     isOpen: () => port?.isOpen ?? false,
-    write: (cmd) =>
-      new Promise((resolve, reject) => {
+    write: async (cmd) => {
+      await waitReady();
+      await new Promise<void>((resolve, reject) => {
         if (!port?.isOpen) return reject(new Error('Serial port not open'));
-        port.write(`${cmd}\n`, (error) => (error ? reject(error) : resolve()));
-      }),
+        const target = port;
+        target.write(`${cmd}\n`, (error) => (error ? reject(error) : resolve()));
+        setTimeout(() => target.isOpen && target.write('\n'), NUDGE_MS);
+      });
+    },
     close: () => {
       stopped = true;
       if (port?.isOpen) port.close();
@@ -266,12 +324,26 @@ function main(): void {
   const appUrl = process.env.APP_URL || DEFAULT_APP_URL;
   const batcher = new ReadingBatcher(httpPoster(appUrl));
   let badLines = 0;
-  const link = connectSerial(path, (line) => {
-    const reading = parseLine(line);
-    if (reading) return batcher.add(reading);
-    badLines += 1;
-    if (badLines === 1 || badLines % 100 === 0) log(`ignored non-reading line (#${badLines}): ${line.slice(0, 80)}`);
-  });
+  const sendConfig = (): void => {
+    for (const cmd of configCommands(process.env)) void link.write(cmd).catch(() => {});
+  };
+  const link = connectSerial(
+    path,
+    (line) => {
+      const reading = parseLine(line);
+      if (reading) return batcher.add(reading);
+      if (isBootLine(line)) {
+        log(`home base booted: ${line.trim()}`);
+        return sendConfig();
+      }
+      const rejected = failedAck(line);
+      if (rejected) return log(`device could not do ${rejected} (hardware absent?)`);
+      if (line.includes('"ack"')) return;
+      badLines += 1;
+      if (badLines === 1 || badLines % 100 === 0) log(`ignored non-reading line (#${badLines}): ${line.slice(0, 80)}`);
+    },
+    sendConfig, // once the board is actually talking (see NUDGE_MS notes)
+  );
   setInterval(() => void batcher.flush(), FLUSH_MS);
 
   const server = createCommandServer(link);

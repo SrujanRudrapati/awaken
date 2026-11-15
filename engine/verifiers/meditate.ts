@@ -1,5 +1,5 @@
 /**
- * Meditate (button D2 + sound A0): hold the button and stay quiet for `target` seconds.
+ * Meditate (button D2 + sound A1): hold the button and stay quiet for `target` seconds.
  *
  * - The first BASELINE_SAMPLES sound readings set the room's quiet baseline (median).
  * - "Calm" = btn=1 and snd ≤ baseline + SOUND_MARGIN. Time counts while calm, and for up to

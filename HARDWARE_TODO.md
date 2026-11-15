@@ -7,12 +7,54 @@ real-world checks still to do, in plan order. Tick them off as you go.
 
 ## Phase 5 — Home Base serial bridge (Arduino on USB)
 
-**Firmware contract** (what `bridge/serial.ts` expects):
-- Serial @ **115200**, one JSON object per line (`\n`), every ~100 ms:
-  `{"t":<ms since boot>,"pad":0|1,"jail":0|1,"btn":0|1,"light":0-1023,"snd":0-1023,"ax":g,"ay":g,"az":g}`
-  (all fields except `t` optional; non-JSON lines like boot banners are ignored).
-- Commands arrive one per line: `SEG:<exactly 4 chars>`, `LOCK`, `UNLOCK`, `BUZZ:chime|alarm|tick`.
-- Pins: pad switch D3, button D2, buzzer D4, servo D5, IR D6, sound A0, light A1, display + accel on I2C.
+**Board:** Arduino **UNO R4 WiFi** (FQBN `arduino:renesas_uno:unor4wifi`) + Grove shield.
+I2C scan (2026-11-14, `firmware/i2c_scan`): **0x4C** MMA7660FC accel, **0x71** HT16K33 4-char alphanumeric.
+
+| Part | Pin | Notes |
+|---|---|---|
+| Button | D2 | `btn` 0/1 |
+| Buzzer | D4 | `BUZZ:chime\|alarm\|tick` |
+| Servo (optional) | D5 | `LOCK`/`UNLOCK`; enable with `HOMEBASE_SERVO=1` |
+| Micro switch / push-up pad | D6 | `pad` 0/1 |
+| IR reflective (optional) | D7 | `jail` 0/1; enable with `HOMEBASE_IR=1` |
+| Light | A0 | `light` 0–1023 (also Phone Jail fallback: phone covers it) |
+| Sound | A1 | `snd` = loudest sample per 100 ms |
+| Accel MMA7660FC | I2C 0x4C | `ax/ay/az` in g (read directly — the Seeed library can hang) |
+| Display HT16K33 | I2C 0x71 | `SEG:<4 chars>`; shows `OATH` at boot |
+
+**Upload (exact steps, macOS):**
+```bash
+brew install arduino-cli
+arduino-cli core update-index
+arduino-cli core install arduino:renesas_uno@1.6.0
+arduino-cli lib install "Adafruit LED Backpack Library@1.5.1" "Servo@1.3.0"   # pulls Adafruit GFX 1.13.0 + BusIO 1.17.4
+ls /dev/cu.usbmodem*                                    # e.g. /dev/cu.usbmodem1051DB35C7E42
+# stop `npm run bridge` / close any Serial Monitor first (one program per port)
+arduino-cli compile --fqbn arduino:renesas_uno:unor4wifi firmware/homebase
+arduino-cli upload  --fqbn arduino:renesas_uno:unor4wifi -p /dev/cu.usbmodemXXXX firmware/homebase
+```
+Then `.env.local`: `SERIAL_PORT=/dev/cu.usbmodemXXXX` (+ `HOMEBASE_IR=1` / `HOMEBASE_SERVO=1` only if fitted).
+
+**Firmware contract** (`firmware/homebase/homebase.ino`, fw `oath-1`):
+- Serial @ **115200**, one JSON line every 100 ms:
+  `{"t":ms,"pad":0|1,"btn":0|1,"light":0-1023,"snd":0-1023,"ax":g,"ay":g,"az":g,"jail":0|1|null,"servo":"locked"|"unlocked"|null}`
+  — absent hardware is `null` (the app treats null as missing). Boot banner: `{"boot":"homebase","fw":"oath-1","accel":true,"display":true}`.
+- Commands one per line: `SEG:<exactly 4 chars>`, `LOCK`, `UNLOCK`, `BUZZ:chime|alarm|tick`, `CFG:IR:0|1`, `CFG:SERVO:0|1`
+  → each answered `{"ack":"<cmd>","ok":true|false}` (`LOCK` without a servo → `ok:false`, harmless).
+- **UNO R4 WiFi USB quirks** (handled by the bridge and hw:check — keep in mind for any new tool):
+  the board's USB bridge holds the last host→board write until another write comes, so each command is followed
+  by a lone `\n` 30 ms later; and nothing arrives for ~3 s after the port opens — don't send commands until the
+  first line is received (a burst in that window froze the board until re-upload).
+- Pad/button polarity or IR polarity wrong? Flip `PAD_ACTIVE_HIGH` / `BTN_ACTIVE_HIGH` / `IR_ACTIVE_LOW` at the top of the sketch and re-upload.
+
+**Check every sensor:** `npm run hw:check` (bridge stopped) → live panel, one row per sensor; each turns ✓ once it
+responds (press pad, press button, cover light, clap, tilt). It also shows `OATH` on the display and chimes.
+`npm run hw:check -- --once` prints one snapshot after 6 s.
+
+- [x] 2026-11-14: readings at 10 Hz, accel |g| ≈ 1.1, light ≈ 750 room, sound responding; all commands acked.
+- [ ] **Look at the display: does it read `OATH`?** If letters are scrambled, the Grove board's segment wiring differs
+      from Adafruit's — tell Claude what it shows.
+- [ ] Did you hear the chime? Press pad, button, cover light, tilt → every row ✓ in `npm run hw:check`.
 
 **Steps**
 - [ ] Plug the Arduino in. Close the Arduino IDE **Serial Monitor** (it locks the port).

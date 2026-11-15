@@ -2,7 +2,7 @@
 Read `SPEC.md` first; it is the source of truth. Use plan mode for changes touching more than 2 files.
 
 ## Stack
-Home Base: Arduino + Grove (push-up pad switch, IR phone jail, servo, button, buzzer, sound, light, 4-digit display, 3-axis accel) · bridge: Node serialport → HTTP · iPhone `/hunter` (DeviceMotion) + Apple Watch app + Apple Health Shortcut → HTTPS · Next.js (App Router) + TypeScript strict + Tailwind + Framer Motion + zod · `@anthropic-ai/sdk` (Haiku 5.5 voice/quiz, Opus 5.5 boss/weekly) · `@google/genai` (quests + photo proof) · `supermemory` SDK (pin version) · `pg` (Tiger Data) · TinyFish API (Gates) · Maritime CLI (cron agent).
+Home Base: Arduino UNO R4 WiFi + Grove (micro-switch push-up pad D6, button D2, buzzer D4, light A0, sound A1, MMA7660 accel + HT16K33 alphanumeric display on I2C; optional servo D5 + IR D7) · bridge: Node serialport → HTTP · iPhone `/hunter` (DeviceMotion) + Apple Watch app + Apple Health Shortcut → HTTPS · Next.js (App Router) + TypeScript strict + Tailwind + Framer Motion + zod · `@anthropic-ai/sdk` (Haiku 5.5 voice/quiz, Opus 5.5 boss/weekly) · `@google/genai` (quests + photo proof) · `supermemory` SDK (pin version) · `pg` (Tiger Data) · TinyFish API (Gates) · Maritime CLI (cron agent).
 
 ## Layout
 - `firmware/` (A) · `bridge/` (A/B)
