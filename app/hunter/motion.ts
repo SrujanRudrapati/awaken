@@ -60,3 +60,21 @@ export function takeBatch(queue: readonly Reading[]): { batch: Reading[]; rest: 
 export function readingsUrl(sessionId: string | undefined): string {
   return sessionId ? `/api/readings?sessionId=${encodeURIComponent(sessionId)}` : '/api/readings';
 }
+
+/**
+ * Wraps an async send so a call while the previous one is still in flight is skipped (its
+ * readings stay queued for the next flush). Batches then reach the server in order — a late
+ * batch overtaking the next one would look like the sensor jumping back in time.
+ */
+export function oneAtATime(task: () => Promise<void>): () => Promise<void> {
+  let running = false;
+  return async () => {
+    if (running) return;
+    running = true;
+    try {
+      await task();
+    } finally {
+      running = false;
+    }
+  };
+}

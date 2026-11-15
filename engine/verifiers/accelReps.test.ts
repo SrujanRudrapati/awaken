@@ -209,3 +209,29 @@ describe('AccelRepCounter — inputs', () => {
     expect(counter.count).toBe(3);
   });
 });
+
+describe('AccelRepCounter — late batches (network reorder)', () => {
+  /** Swaps every other pair of adjacent `size`-sample chunks, like batches overtaking each other. */
+  const reorder = (readings: Reading[], size: number): Reading[] => {
+    const chunks = Array.from({ length: Math.ceil(readings.length / size) }, (_, i) => readings.slice(i * size, (i + 1) * size));
+    return chunks.flatMap((_, i) => (i % 4 === 1 && chunks[i + 1] ? [...chunks[i + 1], ...chunks[i]] : i % 4 === 2 && chunks[i - 1] ? [] : chunks[i]));
+  };
+
+  it('a batch arriving after the next one does not wipe the rep in progress', () => {
+    const ordered = session(times(6, squat()));
+    const counter = new AccelRepCounter('squat');
+
+    feed(counter, reorder(ordered, 6));
+
+    expect(counter.count).toBe(6);
+  });
+
+  it('a big jump back (> 2 s) is still a source restart that keeps calibration', () => {
+    const counter = new AccelRepCounter('squat');
+    feed(counter, session([squat(), squat()]));
+
+    feed(counter, session([squat()]));
+
+    expect(counter.count).toBe(3);
+  });
+});

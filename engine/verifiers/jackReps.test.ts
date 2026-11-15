@@ -155,3 +155,29 @@ describe('per-exercise rotation limits', () => {
     expect(counter.count).toBe(0);
   });
 });
+
+describe('JackRepCounter — late batches and restarts', () => {
+  const reorder = (readings: Reading[], size: number): Reading[] => {
+    const chunks = Array.from({ length: Math.ceil(readings.length / size) }, (_, i) => readings.slice(i * size, (i + 1) * size));
+    return chunks.flatMap((_, i) => (i % 4 === 1 && chunks[i + 1] ? [...chunks[i + 1], ...chunks[i]] : i % 4 === 2 && chunks[i - 1] ? [] : chunks[i]));
+  };
+
+  it('a batch arriving after the next one does not wipe the jack in progress', () => {
+    const counter = new JackRepCounter();
+
+    feed(counter, reorder(session(times(8, jack())), 6));
+
+    expect(counter.count).toBe(8);
+  });
+
+  it('after a source restart the gyro angle starts clean (no junk from a negative time step)', () => {
+    const counter = new JackRepCounter();
+    feed(counter, session([jack(), jack()]));
+    const restarted = session([jack(1_200, { armDeg: 60 })]).map((r, i) => (i === 0 ? { ...r, rz: 300 } : r));
+
+    const events = feed(counter, restarted);
+
+    expect(reasons(events)).toContain('not deep enough');
+    expect(counter.count).toBe(2);
+  });
+});

@@ -22,7 +22,7 @@
  * swing direction and depth, and both count. Swings that alternate sides never calibrate.
  */
 import type { Reading } from '../../lib/schemas';
-import { DEEP_FRACTION, REASON_NOT_DEEP_ENOUGH, REASON_TOO_FAST, REASON_TOO_SLOW, START_FRACTION } from './accelReps';
+import { DEEP_FRACTION, LATE_SAMPLE_MS, REASON_NOT_DEEP_ENOUGH, REASON_TOO_FAST, REASON_TOO_SLOW, START_FRACTION } from './accelReps';
 import type { RepDebug } from './repDebug';
 import { MedianFilter } from './smoothing';
 import type { Verifier, VerifierEvent } from './types';
@@ -110,8 +110,11 @@ export class JackRepCounter implements Verifier {
   push(reading: Reading): VerifierEvent[] {
     const { ax, ay, az, t } = reading;
     if (ax === undefined || ay === undefined || az === undefined) return [];
-    if (this.lastT !== null && t < this.lastT) this.restart();
-    const dt = this.lastT === null ? 0 : Math.min((t - this.lastT) / 1000, 0.2);
+    if (this.lastT !== null && t < this.lastT) {
+      if (this.lastT - t <= LATE_SAMPLE_MS) return []; // late batch: never rewind the swing in progress
+      this.restart();
+    }
+    const dt = this.lastT === null ? 0 : Math.min(Math.max((t - this.lastT) / 1000, 0), 0.2);
     this.lastT = t;
 
     const accel = [ax, ay, az].map((v, i) => this.filters[i].push(v)) as unknown as Vec3;
@@ -278,6 +281,7 @@ export class JackRepCounter implements Verifier {
   }
 
   private restart(): void {
+    this.lastT = null;
     this.filters.forEach((f) => f.reset());
     this.recent = [];
     this.theta = [0, 0, 0];

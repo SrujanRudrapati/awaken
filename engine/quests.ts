@@ -13,6 +13,7 @@ import * as db from '../lib/db';
 import { send, sendAll } from '../lib/device';
 import { getBaselines } from '../lib/baselines';
 import { isDemoPlayerId } from '../lib/demo';
+import { createLatestWriter } from '../lib/latestWriter';
 import { notify } from '../lib/notify';
 import { consumeShield, earnShards, loadWallet } from '../lib/wallet';
 import { power, proofOf, proofScale, rankForPower, spreadProof, spreadProofToNextRank, type StatProof } from '../lib/power';
@@ -113,11 +114,16 @@ function savePlayer(player: Player): Player {
     void persistNewPlayer(player.id); // memory only until we know Tiger has no stored row for this id
     return player;
   }
-  db.upsertPlayer(player).catch((error: unknown) =>
-    console.error(`[engine] could not persist player ${player.id}:`, error instanceof Error ? error.message : error),
-  );
+  writePlayer(player.id, player);
   return player;
 }
+
+/** Full-row upserts, in order per player (the newest row is always the last to land in Tiger). */
+const writePlayer = createLatestWriter<Player>(
+  'player',
+  (player) => db.upsertPlayer(player),
+  (id, error) => console.error(`[engine] could not persist player ${id}:`, error instanceof Error ? error.message : error),
+);
 
 /** The in-memory copy, which is always the freshest (DB writes are fire-and-forget). */
 function cachedPlayer(id: string): Player | undefined {

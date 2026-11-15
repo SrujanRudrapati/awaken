@@ -46,6 +46,11 @@ export const SETTLE_MS = 400;
 /** A rep must reach this fraction of the calibrated depth. */
 export const DEEP_FRACTION = 0.7;
 export const MIN_REP_MS = 800;
+/**
+ * A sample up to this much older than the newest one is a late batch (phone batches can overtake
+ * each other on a slow network) and is dropped; a bigger jump back means the source restarted.
+ */
+export const LATE_SAMPLE_MS = 2_000;
 export const MAX_REP_MS = 4_000;
 /**
  * Peak rotation rate (deg/s) during a rep; above this the phone is being waved, not worn.
@@ -125,7 +130,10 @@ export class AccelRepCounter implements Verifier {
   push(reading: Reading): VerifierEvent[] {
     const { ax, ay, az, t } = reading;
     if (ax === undefined || ay === undefined || az === undefined) return [];
-    if (this.lastT !== null && t < this.lastT) this.restart();
+    if (this.lastT !== null && t < this.lastT) {
+      if (this.lastT - t <= LATE_SAMPLE_MS) return []; // late batch: never rewind the rep in progress
+      this.restart();
+    }
     this.lastT = t;
 
     const accel = [ax, ay, az].map((v, i) => this.accelFilters[i].push(v)) as unknown as Vec3;

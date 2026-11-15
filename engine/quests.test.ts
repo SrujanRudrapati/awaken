@@ -605,3 +605,32 @@ describe('quest engine', () => {
     expect(await sweepExpired(new Date(Date.now() + 60_000))).toBe(0);
   });
 });
+
+describe('player persistence order', () => {
+  beforeEach(() => resetEngine());
+
+  it('Tiger ends up with the newest player row even when upserts finish out of order', async () => {
+    await createPlayer({ name: 'Order', id: 'order-1' });
+    await new Promise((r) => setTimeout(r, 10)); // insert-if-absent settles
+    const landed: number[] = [];
+    let delay = 60;
+    vi.mocked(db.upsertPlayer).mockImplementation((player) => {
+      const ms = delay;
+      delay = Math.max(5, delay - 20); // each later write finishes sooner (slow pool connection first)
+      return new Promise((resolve) => setTimeout(() => {
+        landed.push(player.xp);
+        resolve();
+      }, ms));
+    });
+
+    await grantProof('order-1', 10, 'a');
+    await grantProof('order-1', 10, 'b');
+    await grantProof('order-1', 10, 'c');
+    await new Promise((r) => setTimeout(r, 250));
+
+    const memory = await getPlayer('order-1');
+    expect(landed.at(-1)).toBe(memory?.xp);
+    vi.mocked(db.upsertPlayer).mockReset().mockResolvedValue(undefined);
+  });
+});
+

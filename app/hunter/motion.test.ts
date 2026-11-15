@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ReadingSchema } from '../../lib/schemas';
-import { MAX_BATCH, STANDARD_GRAVITY, shouldKeep, takeBatch, toReading } from './motion';
+import { MAX_BATCH, STANDARD_GRAVITY, oneAtATime, shouldKeep, takeBatch, toReading } from './motion';
 
 describe('phone motion helpers', () => {
   it('converts m/s² to a valid phone Reading in g', () => {
@@ -61,5 +61,39 @@ describe('readingsUrl', () => {
   it('without a session there is nothing to count toward (readings still feed the live view)', async () => {
     const { readingsUrl } = await import('./motion');
     expect(readingsUrl(undefined)).toBe('/api/readings');
+  });
+});
+
+describe('oneAtATime (batches never overtake each other)', () => {
+  it('skips a call while the previous one is still running, then runs again', async () => {
+    let release: () => void = () => undefined;
+    let calls = 0;
+    const send = oneAtATime(async () => {
+      calls += 1;
+      await new Promise<void>((r) => (release = r));
+    });
+
+    const first = send();
+    await send(); // still in flight → skipped (its readings stay queued for the next flush)
+    expect(calls).toBe(1);
+    release();
+    await first;
+    const second = send();
+    release();
+    await second;
+
+    expect(calls).toBe(2);
+  });
+
+  it('a failed send does not block later ones', async () => {
+    let calls = 0;
+    const send = oneAtATime(async () => {
+      calls += 1;
+      throw new Error('offline');
+    });
+
+    await expect(send()).rejects.toThrow('offline');
+    await expect(send()).rejects.toThrow('offline');
+    expect(calls).toBe(2);
   });
 });
