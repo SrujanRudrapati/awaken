@@ -84,6 +84,6 @@ describe('weekly boss report', () => {
   });
 
   it('unknown player → 404', async () => {
-    await expect(weeklyReport('nobody')).rejects.toThrow(/No player/);
+    await expect(weeklyReport('nobody')).rejects.toThrow(/No one found with id nobody/);
   });
 });

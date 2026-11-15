@@ -16,7 +16,7 @@ export async function GET(request: Request): Promise<Response> {
   await connection();
   const params = new URL(request.url).searchParams;
   const id = PlayerIdSchema.safeParse(params.get('playerId') ?? process.env.HEALTH_PLAYER_ID);
-  if (!id.success) return fail(400, 'playerId missing (query ?playerId= or set HEALTH_PLAYER_ID)');
+  if (!id.success) return fail(400, 'Missing your id — add it to the query or set HEALTH_PLAYER_ID');
   const days = DaysSchema.safeParse(params.get('days') ?? undefined);
   if (!days.success) return fail(400, `days must be 1–${MAX_DAYS}`);
   try {

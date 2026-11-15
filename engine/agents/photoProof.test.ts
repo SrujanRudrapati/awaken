@@ -35,6 +35,28 @@ describe('photo proof', () => {
     questId = (await startQuest('p1', { type: 'photo', title: 'Clean your desk' })).id;
   });
 
+  it('never shows old-brand words the model wrote in its reason', () => {
+    const failed = decide({ passed: false, confidence: 0.9, reason: 'The quest says a desk, but this shows the player outside.' });
+    const unsure = decide({ passed: true, confidence: 0.5, reason: 'Could be the quest, the XP is unclear.' });
+
+    for (const verdict of [failed, unsure]) {
+      expect(verdict.reason).not.toMatch(/\b(quests?|player|XP)\b/i);
+      expect(verdict.reason.length).toBeGreaterThan(5);
+    }
+    expect(failed.passed).toBe(false);
+    expect(unsure.passed).toBe(false);
+    expect(decide({ passed: false, confidence: 0.9, reason: 'The desk is still cluttered.' }).reason).toBe('The desk is still cluttered.');
+  });
+
+  it('asks Gemini about the vow, not a "quest"', async () => {
+    vi.mocked(geminiJson).mockResolvedValue({ passed: true, confidence: 0.9, reason: 'Desk is clean.' });
+
+    await submitPhotoProof(jpeg('p1', questId));
+
+    const prompt = JSON.stringify(vi.mocked(geminiJson).mock.calls[0]);
+    expect(prompt).not.toMatch(/\bquest\b/i);
+  });
+
   it('confidence below 0.7 never passes, even if the model says passed', () => {
     expect(decide({ passed: true, confidence: 0.69, reason: 'Blurry desk' })).toMatchObject({ passed: false, reason: 'Needs better proof: Blurry desk' });
     expect(decide({ passed: true, confidence: 0.7, reason: 'Clean desk' }).passed).toBe(true);

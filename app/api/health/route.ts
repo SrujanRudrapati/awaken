@@ -25,7 +25,7 @@ async function handleSleep(body: unknown): Promise<Response> {
   const parsed = SleepSyncSchema.safeParse(body);
   if (!parsed.success) return fail(400, z.prettifyError(parsed.error));
   const playerId = parsed.data.playerId ?? process.env.HEALTH_PLAYER_ID;
-  if (!playerId) return fail(400, 'playerId missing (send it in the body or set HEALTH_PLAYER_ID)');
+  if (!playerId) return fail(400, 'Missing your id — send it in the body or set HEALTH_PLAYER_ID');
   const result = await syncSleep(playerId, parsed.data.samples);
   return ok({
     playerId,
@@ -40,7 +40,7 @@ async function handleTotals(body: unknown): Promise<Response> {
   const parsed = HealthSyncSchema.safeParse(body);
   if (!parsed.success) return fail(400, z.prettifyError(parsed.error));
   const playerId = parsed.data.playerId ?? process.env.HEALTH_PLAYER_ID;
-  if (!playerId) return fail(400, 'playerId missing (send it in the body or set HEALTH_PLAYER_ID)');
+  if (!playerId) return fail(400, 'Missing your id — send it in the body or set HEALTH_PLAYER_ID');
   const result = await syncHealth(playerId, parsed.data);
   return ok({
     playerId,
