@@ -9,6 +9,7 @@
 import { speak as synthesize } from '../../lib/aws/polly';
 import { publish, subscribe } from '../../lib/bus';
 import { claude } from '../../lib/llm';
+import { recall } from '../../lib/memory';
 import type { StreamEvent } from '../../lib/schemas';
 import { CANNED_LINES, VOICE_SYSTEM_PROMPT, sanitizeLine, type VoiceEventType } from './voicePersona';
 
@@ -16,6 +17,9 @@ import { CANNED_LINES, VOICE_SYSTEM_PROMPT, sanitizeLine, type VoiceEventType } 
 export const VOICE_WINDOW_MS = 300;
 /** A voice line later than this is stale on stage. */
 export const VOICE_TIMEOUT_MS = 3_000;
+/** Memory lookup budget before the line (cached per player for minutes, so usually instant). */
+export const VOICE_RECALL_TIMEOUT_MS = 800;
+const VOICE_RECALL_QUERY = 'recent failures, skipped quests, streaks and goals';
 /** Minimum gap between canned rep.rejected lines. */
 const REJECT_COOLDOWN_MS = 5_000;
 
@@ -78,6 +82,12 @@ function canned(state: VoiceState, type: VoiceEventType): string {
   return lines[state.cannedIndex % lines.length];
 }
 
+async function promptFor(moment: Moment): Promise<string> {
+  const memory = moment.playerId ? await recall(moment.playerId, VOICE_RECALL_QUERY, VOICE_RECALL_TIMEOUT_MS) : null;
+  const callback = memory ? `\nWhat the System remembers (use one callback only if it fits): ${memory}` : '';
+  return `Event: ${moment.type}. ${moment.facts}${callback}\nAnnounce it.`;
+}
+
 async function speak(state: VoiceState, moment: Moment): Promise<void> {
   const line =
     moment.type === 'rep.rejected'
@@ -85,7 +95,7 @@ async function speak(state: VoiceState, moment: Moment): Promise<void> {
       : sanitizeLine(
           await claude({
             system: VOICE_SYSTEM_PROMPT,
-            prompt: `Event: ${moment.type}. ${moment.facts}\nAnnounce it.`,
+            prompt: await promptFor(moment),
             maxTokens: 200,
             timeoutMs: VOICE_TIMEOUT_MS,
           }),

@@ -246,3 +246,24 @@ Everything is gated on env vars; nothing breaks if a step is skipped. Put the va
       (Never a Fable id — the code refuses it.) Keep `ANTHROPIC_API_KEY` set: it's the fallback if Bedrock errors.
 - [ ] **Boss report:** `curl localhost:3000/api/report/demo-jin` → `"source":"opus"` (~5 s first time, cached 10 min;
       `?fresh=1` to regenerate). Wi-Fi off → `"source":"fallback"` with a code-written report.
+
+---
+
+## Phase 10 — Supermemory (optional — without it: generic quests, no voice callbacks)
+
+- [ ] **Fix the API key.** 2026-11-14: the `SUPERMEMORY_API_KEY` in `.env.local` returns **401 Unauthorized** on
+      add and search (it doesn't look like a v5 key). Create a new key in the Supermemory console → API Keys,
+      replace it in `.env.local`, restart `npm run dev`.
+- [ ] `npm run smoke:memory` → `remember → true`, then a recall containing "run a 5k" within ~20 s.
+- [ ] Save a goal for the demo player:
+  ```bash
+  curl -X POST localhost:3000/api/player/demo-jin/goals -H 'content-type: application/json' -d '{"goal":"pass calculus"}'
+  ```
+  → `{"saved":true}`. Then fail a squat quest and clear a push-up quest; Supermemory console →
+  namespace `player_demo-jin` shows "FAILED quest …" / "cleared quest …" entries (recorded by
+  `engine/agents/chronicle.ts`, started from `instrumentation.ts` on server start).
+- [ ] Voice callback: trigger a penalty after a recorded failure → the line may reference it ("You failed squats again…").
+- [ ] Designer: `curl -X POST localhost:3000/api/cron/daily -H "authorization: Bearer $CRON_SECRET"` → the day's quests
+      lean toward the goal / weak stats (compare with `npm run smoke:designer`).
+- Note: `npm run demo:reset` does **not** clear Supermemory, so a demo player keeps its history across resets.
+  To wipe it: Supermemory console → delete namespace `player_demo-jin`.

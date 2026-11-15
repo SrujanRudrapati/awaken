@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../lib/llm', () => ({ claude: vi.fn() }));
 vi.mock('../../lib/aws/polly', () => ({ speak: vi.fn(async () => null) }));
+vi.mock('../../lib/memory', () => ({ recall: vi.fn(async () => null) }));
 
 import { publish, subscribe } from '../../lib/bus';
 import { speak } from '../../lib/aws/polly';
 import { claude } from '../../lib/llm';
+import { recall } from '../../lib/memory';
 import type { Quest, StreamEvent } from '../../lib/schemas';
 import { VOICE_WINDOW_MS, announceAwakening, startVoice, stopVoice } from './voice';
 import { CANNED_LINES, sanitizeLine } from './voicePersona';
@@ -103,6 +105,18 @@ describe('System voice', () => {
       { type: 'voice', eventType: 'awakening', playerId: 'p9', text: 'Awakening confirmed. Your trials begin now, Player.', audioUrl: `/api/voice/${'a'.repeat(64)}.mp3` },
     ]);
     expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('Mina');
+  });
+
+  it('feeds what the System remembers about the player into the line', async () => {
+    vi.mocked(recall).mockResolvedValueOnce('Failed squats twice this week');
+    vi.mocked(claude).mockResolvedValue('You skipped squats twice. Not today, Player.');
+
+    publish({ type: 'penalty', playerId: 'p1', questId: 'q1', reason: 'Squats missed' });
+    await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
+
+    expect(vi.mocked(recall).mock.calls[0][0]).toBe('p1');
+    expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('Failed squats twice this week');
+    expect(voices[0].text).toBe('You skipped squats twice. Not today, Player.');
   });
 
   it('startVoice twice does not double-speak', async () => {

@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { geminiJson } from '../../lib/llm';
+import { recall } from '../../lib/memory';
 import { DifficultySchema, QuestTypeSchema, type Player, type QuestType } from '../../lib/schemas';
 import { DAILY_TEMPLATES, QUEST_RULES, type QuestTemplate } from '../progression';
 import type { QuestDesigner } from '../quests';
@@ -42,6 +43,13 @@ export function validateDesign(raw: z.infer<typeof DesignSchema> | null): QuestT
     return [{ type: type.data, difficulty: difficulty.data }];
   });
   return templates.length >= MIN_DAILY ? templates.slice(0, MAX_DAILY) : null;
+}
+
+/** What the designer asks Supermemory before planning a player's day. */
+export const DESIGNER_RECALL_QUERY = "player's goals, failed or skipped quests, weakest stats, favorite quest types";
+
+export function recallForDesigner(player: Player): Promise<string | null> {
+  return recall(player.id, DESIGNER_RECALL_QUERY);
 }
 
 export interface DesignerOptions {

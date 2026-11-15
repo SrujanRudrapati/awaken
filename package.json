@@ -14,7 +14,8 @@
     "tunnel": "cloudflared tunnel --url http://localhost:3000",
     "smoke:designer": "tsx scripts/smoke-designer.ts",
     "db:migrate": "tsx scripts/migrate.ts",
-    "voice:pregen": "tsx scripts/voice-pregen.ts"
+    "voice:pregen": "tsx scripts/voice-pregen.ts",
+    "smoke:memory": "tsx scripts/smoke-memory.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
@@ -30,7 +31,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "serialport": "^13.0.0",
-    "supermemory": "^5.1.2",
+    "supermemory": "5.1.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {

@@ -60,14 +60,14 @@ Model: Opus 5.5 by default. Fable 5.2 only where marked 🧠.
 - ✅ commit
 
 ## PHASE 9 — AI + AWS (1:00–2:30 AM)
-- [ ] 💬 *"lib/models.ts (HAIKU 'claude-haiku-5-5', OPUS 'claude-opus-5-5', GEMINI env; NEVER Fable at runtime). lib/llm.ts: claude() via Bedrock (Converse, AWS_REGION, BEDROCK_*_ID) if set else Anthropic API; gemini(); 8 s timeouts; null on failure."*
-- [ ] 🧠 **Voice** (Fable for the persona prompt) 💬 *"agents/voice.ts: Haiku, cold dramatic original System persona, ≤15 words; canned fallbacks; publish `voice`. lib/aws/polly.ts: speak(text) → Polly neural deep voice mp3 cached in public/voice/; voice events carry audioUrl; pre-generate canned lines."*
-- [ ] 💬 *"agents/quiz.ts (3 MCQ via Haiku, graded in code, ≥2/3 passes; triggered after Phone Jail)."*
-- [ ] 💬 *"agents/designer.ts (Gemini daily quests JSON, only our quest types, fallback templates) + agents/photoProof.ts (Gemini vision {passed,confidence,reason}, <0.7 fails; images stored via lib/aws/s3.ts) + agents/boss.ts (Opus weekly report on demand)."*
+- [x] 💬 *"lib/models.ts (HAIKU 'claude-haiku-5-5', OPUS 'claude-opus-5-5', GEMINI env; NEVER Fable at runtime). lib/llm.ts: claude() via Bedrock (Converse, AWS_REGION, BEDROCK_*_ID) if set else Anthropic API; gemini(); 8 s timeouts; null on failure."*
+- [x] 🧠 **Voice** (Fable for the persona prompt) 💬 *"agents/voice.ts: Haiku, cold dramatic original System persona, ≤15 words; canned fallbacks; publish `voice`. lib/aws/polly.ts: speak(text) → Polly neural deep voice mp3 cached in public/voice/; voice events carry audioUrl; pre-generate canned lines."*
+- [x] 💬 *"agents/quiz.ts (3 MCQ via Haiku, graded in code, ≥2/3 passes; triggered after Phone Jail)."*
+- [x] 💬 *"agents/designer.ts (Gemini daily quests JSON, only our quest types, fallback templates) + agents/photoProof.ts (Gemini vision {passed,confidence,reason}, <0.7 fails; images stored via lib/aws/s3.ts) + agents/boss.ts (Opus weekly report on demand)."*
 - ✅ commit after each
 
 ## PHASE 10 — Supermemory (2:30–3:00 AM)
-- [ ] 💬 *"lib/memory.ts remember/recall with containerTag player_<id>; save goals + per-quest summaries; feed into designer + voice."* ✅ commit
+- [x] 💬 *"lib/memory.ts remember/recall with containerTag player_<id>; save goals + per-quest summaries; feed into designer + voice."* ✅ commit
 
 ### 🎯 3:00 AM — FEATURE FREEZE
 - [ ] 🧠 (Fable) *"Review the whole backend vs SPEC.md: bugs, race conditions, demo risks. List only."* → fix top 5.
