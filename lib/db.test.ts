@@ -87,13 +87,13 @@ describe('db', () => {
 
     const [sql, params] = queryMock.mock.calls[0];
     expect(sql).toMatch(/ON CONFLICT \(id\) DO UPDATE/);
-    expect(params).toEqual(['p1', 'Jin', 'E', 2, 60, JSON.stringify(player.stats), false]);
+    expect(params).toEqual(['p1', 'Jin', 'E', 2, 60, JSON.stringify(player.stats), false, JSON.stringify({ STR: 0, INT: 0, FOCUS: 0, VIT: 0, DISCIPLINE: 0, CHA: 0 })]);
   });
 
   it('getPlayer fills missing stats with 0', async () => {
     queryMock.mockResolvedValue({ rows: [row] });
 
-    expect(await getPlayer('p1')).toEqual(player);
+    expect(await getPlayer('p1')).toEqual({ ...player, proof: { STR: 0, INT: 0, FOCUS: 0, VIT: 0, DISCIPLINE: 0, CHA: 0 } });
   });
 
   it('updatePlayer only sets whitelisted fields, parameterised', async () => {
@@ -157,7 +157,8 @@ describe('db', () => {
     queryMock.mockResolvedValue({ rows: [] });
     const applied = await migrate();
     expect(applied?.[0]).toBe('ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb');
-    expect(applied?.[2]).toMatch(/CREATE TABLE IF NOT EXISTS calibrations/);
+    expect(applied?.[2]).toBe('ALTER TABLE players ADD COLUMN IF NOT EXISTS proof jsonb');
+    expect(applied?.[3]).toMatch(/CREATE TABLE IF NOT EXISTS calibrations/);
     expect(applied?.[1]).toMatch(/CREATE TABLE IF NOT EXISTS sleep_samples[\s\S]*PRIMARY KEY \(player_id, start_ts, end_ts, stage\)/);
 
     delete process.env.TIGER_DATABASE_URL;

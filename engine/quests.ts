@@ -11,8 +11,12 @@ import { randomUUID } from 'node:crypto';
 import { publish } from '../lib/bus';
 import * as db from '../lib/db';
 import { send, sendAll } from '../lib/device';
+import { getBaselines } from '../lib/baselines';
+import { isDemoPlayerId } from '../lib/demo';
 import { notify } from '../lib/notify';
-import { StatSchema, type Difficulty, type Player, type Quest, type QuestKind, type QuestType } from '../lib/schemas';
+import { power, proofOf, proofScale, rankForPower, spreadProof, spreadProofToNextRank, type StatProof } from '../lib/power';
+import { StatSchema, type Difficulty, type Player, type Quest, type QuestKind, type QuestType, type Stat } from '../lib/schemas';
+import { forgetLedger, passedBy, recordProof, weeklyProof } from './ledger';
 import {
   DAILY_TEMPLATES,
   DEFAULT_TARGET_TIME,
@@ -21,10 +25,8 @@ import {
   QUEST_RULES,
   defaultTitle,
   endOfDay,
-  demoRankUpXp,
   levelForXp,
   nextMorningDeadline,
-  rankForXp,
   rankSegment,
   segNumber,
   TIMED_SLEEP_TYPES,
@@ -148,6 +150,7 @@ export async function createPlayer(input: { name: string; id?: string }): Promis
  * sensor focus (no events published: the players are gone). Returns how many were removed.
  */
 export function purgePlayers(shouldPurge: (playerId: string) => boolean): number {
+  forgetLedger(shouldPurge);
   const state = getState();
   for (const quest of [...state.quests.values()]) {
     if (!shouldPurge(quest.playerId)) continue;
@@ -214,18 +217,20 @@ export interface NewQuestInput {
   kind?: QuestKind;
   /** "HH:MM" for lightsoutby / bedtime (defaults to DEFAULT_TARGET_TIME). */
   targetTime?: string;
+  /** Book / chapter for a read vow. */
+  topic?: string;
 }
 
 function buildQuest(playerId: string, input: NewQuestInput): Quest {
   const difficulty = input.difficulty ?? 'normal';
-  const demoJail = isDemoMode() && input.type === 'jail' ? DEMO_JAIL_SECONDS : undefined;
+  const demoJail = isDemoMode() && (input.type === 'jail' || input.type === 'read') ? DEMO_JAIL_SECONDS : undefined;
   const target = input.target ?? demoJail ?? QUEST_RULES[input.type].target[difficulty];
   const targetTime = TIMED_SLEEP_TYPES.includes(input.type) ? (input.targetTime ?? DEFAULT_TARGET_TIME) : undefined;
   return {
     id: randomUUID(),
     playerId,
     stat: QUEST_RULES[input.type].stat,
-    title: input.title ?? defaultTitle(input.type, target, targetTime),
+    title: input.title ?? (input.type === 'read' && input.topic ? `Read: ${input.topic} · ${Math.max(1, Math.round(target / 60))} min` : defaultTitle(input.type, target, targetTime)),
     type: input.type,
     target,
     progress: 0,
@@ -235,6 +240,7 @@ function buildQuest(playerId: string, input: NewQuestInput): Quest {
     difficulty,
     kind: input.kind ?? 'manual',
     ...(targetTime ? { targetTime } : {}),
+    ...(input.type === 'read' && input.topic ? { topic: input.topic } : {}),
   };
 }
 
@@ -320,21 +326,91 @@ export function cancelQuest(playerId: string, questId: string): Quest {
  * First Calibration: starting stats + starting Proof (which sets rank and level). Never lowers
  * anything — a re-calibration only raises stats that measured higher.
  */
-export async function applyCalibration(playerId: string, seed: { stats: Player['stats']; xp: number }): Promise<Player> {
+export async function applyCalibration(playerId: string, seed: { stats: Player['stats']; proof: StatProof }): Promise<Player> {
   const player = await requirePlayer(playerId);
+  const current = proofOf(player);
   const stats = Object.fromEntries(StatSchema.options.map((s) => [s, Math.max(player.stats[s], seed.stats[s])])) as Player['stats'];
-  const xp = Math.max(player.xp, seed.xp);
-  return savePlayer({ ...player, stats, xp, level: levelForXp(xp), rank: rankForXp(xp) });
+  const proof = Object.fromEntries(StatSchema.options.map((s) => [s, Math.max(current[s], seed.proof[s])])) as StatProof;
+  const xp = Math.max(player.xp, StatSchema.options.reduce((sum, s) => sum + proof[s], 0));
+  return savePlayer({ ...player, stats, proof, xp, level: levelForXp(xp), rank: rankForPower(power(proof)) });
 }
 
-/** Bonus Proof outside a vow (e.g. re-calibration). Announces an Ascension if it causes one. */
-export async function grantProof(playerId: string, amount: number, reason: string): Promise<Player> {
+/** Bonus Proof outside a vow (e.g. re-calibration). Announces Ascension / rank changes it causes. */
+export async function grantProof(playerId: string, amount: number, reason: string, stat: Stat = 'DISCIPLINE'): Promise<Player> {
   const player = await requirePlayer(playerId);
-  const xp = player.xp + Math.max(0, Math.round(amount));
-  const updated = savePlayer({ ...player, xp, level: levelForXp(xp), rank: rankForXp(xp) });
-  db.logEvent({ playerId, kind: 'xp', value: xp - player.xp, source: 'engine', detail: { reason } });
-  if (updated.level > player.level) announceLevelUp(player, updated);
-  return updated;
+  return creditProof(player, stat, Math.max(0, Math.round(amount)), reason).player;
+}
+
+/**
+ * The one place Proof is added: total (xp → level) and per stat (→ Power → rank). Proof earned
+ * in DEMO_MODE is logged unverified (kept off the weekly leaderboard). Publishes rank.up,
+ * rank.passed and the Ascension (level-up) when they happen.
+ */
+function creditProof(
+  player: Player,
+  stat: Stat | 'spread',
+  amount: number,
+  reason: string,
+  patch: Partial<Player> = {},
+): { player: Player; leveledUp: boolean } {
+  const before = proofOf(player);
+  const proof = stat === 'spread' ? spreadProof(before, amount) : { ...before, [stat]: before[stat] + amount };
+  const xp = player.xp + amount;
+  const updated = savePlayer({ ...player, ...patch, xp, proof, level: levelForXp(xp), rank: rankForPower(power(proof)) });
+
+  const verified = !isDemoMode();
+  const weeklyBefore = weeklyProof(player.id);
+  recordProof(player.id, player.name, amount, verified);
+  db.logEvent({ playerId: player.id, kind: 'xp', stat: stat === 'spread' ? null : stat, value: amount, verified, source: 'engine', detail: { reason, demo: !verified } });
+  if (verified) {
+    for (const row of passedBy(player.id, weeklyBefore, weeklyProof(player.id))) {
+      publish({ type: 'rank.passed', playerId: player.id, passedId: row.id, passedName: row.name, weeklyProof: weeklyProof(player.id) });
+    }
+  }
+  if (updated.rank !== player.rank) {
+    publish({ type: 'rank.up', playerId: player.id, fromRank: player.rank, toRank: updated.rank, power: power(proof) });
+  }
+  const leveledUp = updated.level > player.level;
+  if (leveledUp) announceLevelUp(player, updated);
+  return { player: updated, leveledUp };
+}
+
+// ── Demo seeding ────────────────────────────────────────────────────────────
+
+export interface SeedProfile {
+  id: string;
+  name: string;
+  proof: StatProof;
+  weeklyProof: number;
+}
+
+/**
+ * npm run demo:seed-others: a disposable profile (id must match the demo pattern) with lifetime
+ * Proof per stat and this week's Proof, recorded as verified so it shows on the leaderboard.
+ */
+export function seedDemoPlayer(profile: SeedProfile): Player {
+  if (!isDemoPlayerId(profile.id)) throw new QuestError(`Seed ids must start with demo- (got ${profile.id})`, 400);
+  const xp = StatSchema.options.reduce((sum, s) => sum + profile.proof[s], 0);
+  const stats = Object.fromEntries(StatSchema.options.map((s) => [s, Math.floor(profile.proof[s] / 30)])) as Player['stats'];
+  const player = savePlayer({
+    id: profile.id,
+    name: profile.name,
+    stats,
+    proof: profile.proof,
+    xp,
+    level: levelForXp(xp),
+    rank: rankForPower(power(profile.proof)),
+    penalty: false,
+  });
+  const top = StatSchema.options.reduce((best, s) => (profile.proof[s] > profile.proof[best] ? s : best), StatSchema.options[0]);
+  recordProof(player.id, player.name, profile.weeklyProof, true);
+  db.logEvent({ playerId: player.id, kind: 'xp', stat: top, value: profile.weeklyProof, verified: true, source: 'engine', detail: { reason: 'demo-seed' } });
+  return player;
+}
+
+/** This week's verified Proof for one person (the live ledger). */
+export function weeklyProofOf(playerId: string): number {
+  return weeklyProof(playerId);
 }
 
 // ── Completion, level-up, failure ───────────────────────────────────────────
@@ -353,31 +429,28 @@ export interface CompleteOptions {
 /** Awards XP (+1 stat) for an active quest. Internal: sensor quests reach this only via the router. */
 async function awardQuest(playerId: string, questId: string, options: CompleteOptions = {}): Promise<CompletionResult> {
   await requirePlayer(playerId);
-  const active = requireActiveQuest(playerId, questId);
-  const player = cachedPlayer(playerId) as Player; // re-read after the await: no lost updates
+  requireActiveQuest(playerId, questId);
+  const baselines = await getBaselines(playerId);
+  const active = requireActiveQuest(playerId, questId); // re-check after the await
+  const player = cachedPlayer(playerId) as Player; // re-read after the awaits: no lost updates
   stopQuest(active);
+  // Emergency rewards are fixed (DEMO_MODE's first one guarantees a rank-up); others scale to the baseline.
+  const scale = active.kind === 'emergency' ? 1 : proofScale(active, baselines);
   const bonus = Math.max(0, Math.round(options.bonusXp ?? 0));
-  const quest = storeQuest({ ...active, status: 'done', progress: Math.max(active.progress, active.target), xp: active.xp + bonus });
+  const quest = storeQuest({ ...active, status: 'done', progress: Math.max(active.progress, active.target), xp: Math.round(active.xp * scale) + bonus });
 
-  const xp = player.xp + quest.xp;
   const penaltyCleared = quest.kind === 'penalty' && !hasActivePenaltyQuest(playerId);
-  const updated = savePlayer({
-    ...player,
-    xp,
-    level: levelForXp(xp),
-    rank: rankForXp(xp),
+  db.logEvent({ playerId, kind: 'quest.complete', stat: quest.stat, value: 1, source: 'engine' });
+  publish({ type: 'quest.complete', quest, xpGained: quest.xp });
+  notify({ title: '[VOW KEPT]', message: `${quest.title} · +${quest.xp} Proof`, tags: ['white_check_mark'] });
+  // DEMO_MODE urgent vows spread their Proof over the measured stats (Power rewards balance; see spreadProofToNextRank).
+  const target = quest.kind === 'emergency' && isDemoMode() ? 'spread' : quest.stat;
+  const { player: updated, leveledUp } = creditProof(player, target, quest.xp, `vow:${quest.type}`, {
     stats: { ...player.stats, [quest.stat]: player.stats[quest.stat] + 1 },
     penalty: penaltyCleared ? false : player.penalty,
   });
 
-  db.logEvent({ playerId, kind: 'xp', stat: quest.stat, value: quest.xp, source: 'engine' });
-  db.logEvent({ playerId, kind: 'quest.complete', stat: quest.stat, value: 1, source: 'engine' });
-  publish({ type: 'quest.complete', quest, xpGained: quest.xp });
-  notify({ title: '[VOW KEPT]', message: `${quest.title} · +${quest.xp} Proof`, tags: ['white_check_mark'] });
-
-  const leveledUp = updated.level > player.level;
-  if (leveledUp) announceLevelUp(player, updated);
-  else void sendAll(['BUZZ:chime', segNumber(quest.progress)]);
+  if (!leveledUp) void sendAll(['BUZZ:chime', segNumber(quest.progress)]);
   return { quest, player: updated, leveledUp };
 }
 
@@ -483,12 +556,33 @@ export async function failQuest(
   return { quest, penaltyQuest };
 }
 
+/**
+ * A read vow's Phone Jail time is done: no Proof yet — it stays active (progress = target)
+ * until the reading trial passes (engine/agents/readingTrial.ts).
+ */
+function holdReadingVow(quest: Quest): void {
+  const stored = getState().quests.get(quest.id);
+  if (!stored || stored.status !== 'active') return;
+  stopQuest(stored);
+  const ready = storeQuest({ ...stored, progress: stored.target });
+  publish({ type: 'quest.update', quest: ready });
+  void sendAll(['BUZZ:chime', 'SEG:QUIZ']);
+}
+
+/** Reading trial passed (≥ 2/3) → the read vow is verified and pays out. */
+export async function completeReadingVow(playerId: string, questId: string): Promise<CompletionResult> {
+  const quest = requireActiveQuest(playerId, questId);
+  if (quest.type !== 'read' || quest.progress < quest.target) throw new QuestError('Finish the reading time first', 409);
+  return awardQuest(playerId, questId);
+}
+
 /** Router hook: a sensor quest hit its target. */
 function onSensorComplete(quest: Quest): void {
   if (!getState().quests.has(quest.id)) {
     publish({ type: 'quest.complete', quest, xpGained: quest.xp }); // not an engine quest
     return;
   }
+  if (quest.type === 'read') return holdReadingVow(quest);
   awardQuest(quest.playerId, quest.id)
     .then(() => {
       if (quest.type === 'jail') issueFocusQuiz(quest.playerId);
@@ -553,7 +647,7 @@ export async function emergencyQuest(playerId: string, type: QuestType = 'pushup
     deadline,
     kind: 'emergency',
   });
-  const xp = isDemoMode() && brandNew ? Math.max(built.xp, demoRankUpXp(player.xp)) : built.xp;
+  const xp = isDemoMode() && brandNew ? Math.max(built.xp, spreadProofToNextRank(proofOf(player))) : built.xp;
   const quest = launch(storeQuest({ ...built, xp }));
   void sendAll(['BUZZ:alarm', segNumber(EMERGENCY_SECONDS)]);
   notify({ title: '[URGENT VOW]', message: quest.title, priority: 'urgent', tags: ['rotating_light'] });

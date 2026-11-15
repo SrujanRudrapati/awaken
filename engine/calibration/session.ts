@@ -12,10 +12,11 @@
  * calibration.complete.
  */
 import { publish } from '../../lib/bus';
+import { setBaselines } from '../../lib/baselines';
 import * as db from '../../lib/db';
+import { seedProofForRank, zeroProof } from '../../lib/power';
 import type { Player, QuestType, Rank } from '../../lib/schemas';
 import { composeLine, sayLine } from '../agents/voice';
-import { RANK_THRESHOLDS } from '../progression';
 import { QuestError, applyCalibration, cancelQuest, getPlayer, getQuest, grantProof, isDemoMode, startQuest } from '../quests';
 import { recentNights } from '../sleepSync';
 import { FOCUS_DURATION_MS, buildTrials, scoreTrials, type Trial, type TrialResponse } from './focus';
@@ -316,8 +317,6 @@ async function submitFocus(session: Session, responses: readonly TrialResponse[]
 
 // ── Completion ──────────────────────────────────────────────────────────────
 
-const rankXp = (rank: Rank): number => RANK_THRESHOLDS.find(([r]) => r === rank)?.[1] ?? 0;
-
 async function maybeComplete(session: Session): Promise<void> {
   if (session.result || !STAGES.every((s) => session.scores[s] !== undefined)) return;
   const scores = session.scores as StageScores;
@@ -342,7 +341,10 @@ async function maybeComplete(session: Session): Promise<void> {
   session.result = result;
   state().latest.set(session.playerId, result);
 
-  await applyCalibration(session.playerId, { stats, xp: session.recalibration ? 0 : rankXp(rank) });
+  const body = session.baselines.body as { reps?: number } | undefined;
+  const vitality = session.baselines.vitality as { jumpingJacks?: number } | undefined;
+  setBaselines(session.playerId, { bodyReps: body?.reps, jumpingJacks: vitality?.jumpingJacks });
+  await applyCalibration(session.playerId, { stats, proof: session.recalibration ? zeroProof() : seedProofForRank(rank) });
   if (bonusXp) await grantProof(session.playerId, bonusXp, 'recalibration');
   Promise.resolve()
     .then(() => db.insertCalibration(session.playerId, at, { ...result }))

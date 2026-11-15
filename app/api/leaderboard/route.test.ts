@@ -1,57 +1,57 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/server', () => ({ connection: vi.fn() }));
-vi.mock('../../../lib/db', () => ({ leaderboard: vi.fn() }));
+vi.mock('../../../lib/db', () => ({ weeklyLeaderboard: vi.fn() }));
 vi.mock('../../../engine/quests', () => ({ listPlayersInMemory: vi.fn().mockReturnValue([]) }));
 
+import { recordProof, resetLedger } from '../../../engine/ledger';
 import { listPlayersInMemory } from '../../../engine/quests';
-import { leaderboard } from '../../../lib/db';
+import { weeklyLeaderboard } from '../../../lib/db';
 import { GET } from './route';
 
-describe('GET /api/leaderboard', () => {
-  it('returns the top players', async () => {
-    vi.mocked(leaderboard).mockResolvedValue([{ id: 'a', name: 'A', rank: 'D', level: 3, xp: 120 }]);
+const req = (query = '') => new Request(`http://x/api/leaderboard${query}`);
+const zero = { STR: 0, INT: 0, FOCUS: 0, VIT: 0, DISCIPLINE: 0, CHA: 0 };
+const live = (id: string, proof = zero) => ({ id, name: id.toUpperCase(), rank: 'E' as const, level: 1, xp: 0, penalty: false, stats: zero, proof });
 
-    const res = await GET();
-
-    expect(await res.json()).toEqual({
-      success: true,
-      data: { players: [{ id: 'a', name: 'A', rank: 'D', level: 3, xp: 120 }] },
-      error: null,
-    });
+describe('GET /api/leaderboard (weekly)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetLedger();
+    vi.mocked(listPlayersInMemory).mockReturnValue([]);
   });
 
-  it('returns 503 when the DB fails', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.mocked(leaderboard).mockRejectedValue(new Error('down'));
-
-    expect((await GET()).status).toBe(503);
-  });
-
-  const live = (id: string, xp: number) => ({
-    id, name: id.toUpperCase(), rank: 'E' as const, level: 1, xp, penalty: false,
-    stats: { STR: 0, INT: 0, FOCUS: 0, VIT: 0, DISCIPLINE: 0, CHA: 0 },
-  });
-
-  it('overlays fresher in-memory players on the DB rows and re-sorts', async () => {
-    vi.mocked(leaderboard).mockResolvedValue([
-      { id: 'a', name: 'A', rank: 'E', level: 1, xp: 50 },
-      { id: 'b', name: 'B', rank: 'E', level: 1, xp: 40 },
+  it('ranks by Proof earned this week, with rank and Power', async () => {
+    vi.mocked(weeklyLeaderboard).mockResolvedValue([
+      { id: 'a', name: 'A', rank: 'D', level: 3, proof: { ...zero, STR: 100 }, weeklyProof: 120 },
+      { id: 'b', name: 'B', rank: 'E', level: 1, proof: null, weeklyProof: 300 },
     ]);
-    vi.mocked(listPlayersInMemory).mockReturnValueOnce([live('b', 90), live('c', 10)]);
 
-    const { data } = await (await GET()).json();
+    const { data } = await (await GET(req())).json();
 
-    expect(data.players.map((p: { id: string; xp: number }) => [p.id, p.xp])).toEqual([['b', 90], ['a', 50], ['c', 10]]);
+    expect(data.players.map((p: { id: string }) => p.id)).toEqual(['b', 'a']);
+    expect(data.players[1]).toMatchObject({ rank: 'D', power: 10, weeklyProof: 120 });
+    expect(vi.mocked(weeklyLeaderboard).mock.calls[0][1]).toBe(false); // DEMO_MODE Proof excluded by default
   });
 
-  it('serves in-memory players when the DB fails', async () => {
+  it('live ledger beats a lagging DB; unverified (DEMO_MODE) Proof counts only with includeDemo=1', async () => {
+    vi.mocked(weeklyLeaderboard).mockResolvedValue([{ id: 'a', name: 'A', rank: 'E', level: 1, proof: null, weeklyProof: 10 }]);
+    vi.mocked(listPlayersInMemory).mockReturnValue([live('a'), live('c')]);
+    recordProof('a', 'A', 50, true);
+    recordProof('c', 'C', 80, false);
+
+    const strict = (await (await GET(req())).json()).data.players;
+    expect(strict.map((p: { id: string; weeklyProof: number }) => [p.id, p.weeklyProof])).toEqual([['a', 50], ['c', 0]]);
+    const demo = (await (await GET(req('?includeDemo=1'))).json()).data.players;
+    expect(demo[0]).toMatchObject({ id: 'c', weeklyProof: 80 });
+  });
+
+  it('DB down: serves the live board, or 503 if there is nothing', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    vi.mocked(leaderboard).mockRejectedValue(new Error('down'));
-    vi.mocked(listPlayersInMemory).mockReturnValueOnce([live('a', 5)]);
+    vi.mocked(weeklyLeaderboard).mockRejectedValue(new Error('down'));
+    expect((await GET(req())).status).toBe(503);
 
-    const res = await GET();
-
+    vi.mocked(listPlayersInMemory).mockReturnValue([live('a')]);
+    const res = await GET(req());
     expect(res.status).toBe(200);
     expect((await res.json()).data.players).toHaveLength(1);
   });

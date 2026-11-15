@@ -60,6 +60,7 @@ export const QUEST_RULES: Record<QuestType, QuestRule> = {
   bedtime: { stat: 'DISCIPLINE', baseXp: 25, target: { easy: 1, normal: 1, hard: 1 }, unit: 'night', title: 'Bedtime on target' },
   photo: { stat: 'DISCIPLINE', baseXp: 20, target: { easy: 1, normal: 1, hard: 1 }, unit: 'photo', title: 'Photo proof' },
   gate: { stat: 'CHA', baseXp: 60, target: { easy: 1, normal: 1, hard: 1 }, unit: 'field vow', title: 'Field Vow' },
+  read: { stat: 'INT', baseXp: 40, target: { easy: 10 * 60, normal: 20 * 60, hard: 30 * 60 }, unit: 'seconds', title: 'Read' },
   quiz: { stat: 'INT', baseXp: 30, target: { easy: 1, normal: 1, hard: 1 }, unit: 'trial', title: 'Mind Trial' },
 };
 

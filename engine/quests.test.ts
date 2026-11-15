@@ -96,7 +96,7 @@ describe('quest engine', () => {
     expect(sendAll).toHaveBeenCalledWith(['BUZZ:chime', 'SEG:   3']);
   });
 
-  it('publishes levelup and shows ASCN then the rank on the display', async () => {
+  it('publishes levelup and shows ASCN then the rank on the display (rank comes from Power, not total Proof)', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     await createPlayer({ name: 'Jin', id: 'p1' });
     const quest = await startQuest('p1', { type: 'gate', difficulty: 'hard' }); // 120 XP
@@ -104,15 +104,16 @@ describe('quest engine', () => {
     const { leveledUp, player } = await completeQuest('p1', quest.id);
 
     expect(leveledUp).toBe(true);
-    expect(player).toMatchObject({ xp: 120, level: 3, rank: 'D' });
-    expect(ofType('levelup')).toEqual([{ type: 'levelup', playerId: 'p1', fromRank: 'E', toRank: 'D', level: 3 }]);
+    expect(player).toMatchObject({ xp: 120, level: 3, rank: 'E', proof: expect.objectContaining({ CHA: 120 }) }); // √120 ≈ 11 Power < D (30)
+    expect(ofType('levelup')).toEqual([{ type: 'levelup', playerId: 'p1', fromRank: 'E', toRank: 'E', level: 3 }]);
+    expect(ofType('rank.up')).toEqual([]);
     expect(sendAll).toHaveBeenCalledWith(['BUZZ:chime', 'SEG:ASCN']);
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: '[VOW KEPT]' }));
     expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ title: '[ASCENSION]', message: 'Jin ascends to level 3 · Rank D', priority: 'high' }),
+      expect.objectContaining({ title: '[ASCENSION]', message: 'Jin ascends to level 3 · Rank E', priority: 'high' }),
     );
     await vi.advanceTimersByTimeAsync(2_000);
-    expect(send).toHaveBeenCalledWith('SEG:RK-D');
+    expect(send).toHaveBeenCalledWith('SEG:RK-E');
   });
 
   it('refuses to complete a sensor quest outside the router', async () => {
@@ -377,8 +378,9 @@ describe('quest engine', () => {
         pushups(10).forEach(routeReading);
         await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('done'));
 
-        expect(quest.xp).toBe(100);
-        expect(await getPlayer('demo-1')).toMatchObject({ rank: 'D', xp: 100 });
+        expect(quest.xp).toBe(228); // spread over STR/VIT/INT/FOCUS: 4 × √57 ≥ 30 Power = rank D
+        expect(await getPlayer('demo-1')).toMatchObject({ rank: 'D', xp: 228 });
+        expect(ofType('rank.up')).toEqual([expect.objectContaining({ fromRank: 'E', toRank: 'D' })]);
         expect(ofType('levelup')).toEqual([expect.objectContaining({ fromRank: 'E', toRank: 'D' })]);
       });
 

@@ -365,3 +365,15 @@ Tiger table `calibrations` (applied 2026-11-14). Re-calibration every 30 days (+
 - [ ] Live run on the Home Base pad (body) + phone armband jumping jacks (vitality), then mind + focus from the UI.
       Expect `calibration.stage` events (started/done) and `calibration.complete` with the starting rank.
 
+---
+
+## Phase F — Rank (Power), weekly leaderboard, reading vow
+
+- `npm run db:migrate` adds `players.proof` (applied 2026-11-15). Restart `npm run dev` after pulling.
+- Stage demo: `npm run demo:seed-others -- demo-jin` → 9 people (E/D/C) 8–170 Proof above demo-jin this week;
+  keep a vow (DEMO_MODE off, or view `GET /api/leaderboard?includeDemo=1`) → `rank.passed` on the stream. `npm run demo:reset` removes them.
+  Verified live 2026-11-15: board sorted by weekly Proof with rank + Power.
+- [ ] **Reading vow:** `POST /api/quest/start {"playerId","type":"read","topic":"Book, chapter 3"}` → put the phone in the jail for the
+      time (20 s in DEMO_MODE) → display `QUIZ` + chime → `POST /api/read/trial` → 3 questions, 30 s each →
+      `POST /api/read/answer {"answers":[i,i,i]}` → ≥ 2 right verifies the vow (Mind Proof). Gemini offline → "try again", never a free pass.
+

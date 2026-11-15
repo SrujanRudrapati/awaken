@@ -49,6 +49,7 @@ original names (`quest`, `xp`, `playerId`, `/api/quest/...`, `quest.complete`, `
 System → **Iris, the Arbiter** · quest → **vow** · XP → **Proof** · level up → **Ascension** · Awakening Test → **Calibration** ·
 Penalty Zone → **the Reckoning** · league → **Constellation** · gold → **Shards** · gate → **Field Vow** ·
 stats STR/INT/FOCUS/VIT/DISCIPLINE/CHA → **Body/Mind/Focus/Vitality/Discipline/Presence**. Ranks **E → D → C → B → A** (A is top; no S).
+**Rank = Power** (`lib/power.ts`): Power = Σ √(Proof per stat) + 3 × √(weakest stat); bands E 0 · D 30 · C 70 · B 140 · A 250. Level still = Proof/50 (Ascension). Rep-vow Proof scales to the Calibration baseline (0.5×–2×). Leaderboard = Proof earned in the last 7 days, verified only (DEMO_MODE Proof excluded unless `?includeDemo=1`).
 Never user-visible: player, hunter, awaken, dungeon, shadow, arise (`lib/brand.test.ts` enforces; model lines with them are replaced by canned ones).
 Where this document still says System/quest/XP/Penalty Zone, read the OATH term.
 
@@ -113,6 +114,7 @@ Laptop → Home Base (one per line, `DeviceCommandSchema`): `SEG:<4 chars>`, `LO
 
 ### SSE events (backend → web app)
 `reading`, `rep`, `rep.rejected` (half-rep → "REP NOT COUNTED"), `quest.update`, `quest.complete`, `levelup`, `penalty`, `voice`. Payloads: `StreamEventSchema` in `lib/schemas.ts`.
+Added 2026-11-15: `rank.up` (`{playerId, fromRank, toRank, power}`), `rank.passed` (`{playerId, passedId, passedName, weeklyProof}`), `calibration.stage`, `calibration.complete`.
 Added 2026-11-14: `sleep.summary` (`{playerId, summary: NightSummary, line, irisMood:"sleepy"}`, once per night). Every event on the wire carries `irisMood` (watching|unimpressed|proud|furious|sleepy).
 `voice` may carry `audioUrl` (Polly MP3 at `/api/voice/<hash>.mp3`); without it the browser speaks the text (`lib/voicePlayback.ts`).
 

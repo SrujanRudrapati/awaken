@@ -41,6 +41,7 @@ const VERIFIERS: Partial<Record<QuestType, Partial<Record<Source, VerifierFactor
   situp: accel('situp'),
   punch: { watch: watchCounted },
   jail: { homebase: (quest) => new JailVerifier(quest) },
+  read: { homebase: (quest) => new JailVerifier(quest) }, // phone in the jail while reading
   meditate: { homebase: (quest) => new MeditateVerifier(quest) },
   lightsout: { homebase: () => new LightsOutVerifier() },
 };

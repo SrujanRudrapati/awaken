@@ -1,7 +1,7 @@
 /**
  * POST /api/quest/start
  *   `{ playerId, questId }`                                 → resume an existing active quest
- *   `{ playerId, type, difficulty?, target?, title?, targetTime? }` → create + start a new one
+ *   `{ playerId, type, difficulty?, target?, title?, targetTime?, topic? }` → create + start a new one
  * Sensor quests start counting immediately.
  */
 import { z } from 'zod';
@@ -19,6 +19,7 @@ const NewQuestSchema = z
     target: z.number().int().positive().max(100_000).optional(),
     title: z.string().trim().min(1).max(80).optional(),
     targetTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "targetTime must be HH:MM").optional(),
+    topic: z.string().trim().min(1).max(120).optional(), // read vows: book / chapter
   })
   // XP is fixed per type × difficulty, so a custom target may not undercut the easy one.
   .refine((b) => b.target === undefined || b.target >= QUEST_RULES[b.type].target.easy, {

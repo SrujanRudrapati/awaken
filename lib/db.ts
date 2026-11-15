@@ -100,6 +100,7 @@ interface PlayerRow {
   xp: number | null;
   stats: Record<string, unknown> | null;
   penalty: boolean | null;
+  proof?: Record<string, unknown> | null;
 }
 
 function emptyStats(): Record<Stat, number> {
@@ -116,6 +117,7 @@ export function rowToPlayer(row: PlayerRow): Player | null {
     xp: row.xp ?? 0,
     stats: { ...emptyStats(), ...(row.stats ?? {}) },
     penalty: row.penalty ?? false,
+    proof: { ...emptyStats(), ...(row.proof ?? {}) },
   });
   if (!parsed.success) {
     console.error(`[db] player ${row.id} has invalid data`, parsed.error.message);
@@ -126,18 +128,18 @@ export function rowToPlayer(row: PlayerRow): Player | null {
 
 export async function upsertPlayer(player: Player): Promise<void> {
   await query(
-    `INSERT INTO players (id, name, rank, level, xp, stats, penalty)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO players (id, name, rank, level, xp, stats, penalty, proof)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (id) DO UPDATE SET
        name = EXCLUDED.name, rank = EXCLUDED.rank, level = EXCLUDED.level,
-       xp = EXCLUDED.xp, stats = EXCLUDED.stats, penalty = EXCLUDED.penalty`,
-    [player.id, player.name, player.rank, player.level, player.xp, JSON.stringify(player.stats), player.penalty],
+       xp = EXCLUDED.xp, stats = EXCLUDED.stats, penalty = EXCLUDED.penalty, proof = EXCLUDED.proof`,
+    [player.id, player.name, player.rank, player.level, player.xp, JSON.stringify(player.stats), player.penalty, JSON.stringify(player.proof ?? emptyStats())],
   );
 }
 
 export async function getPlayer(id: string): Promise<Player | null> {
   const rows = await query<PlayerRow>(
-    'SELECT id, name, rank, level, xp, stats, penalty FROM players WHERE id = $1',
+    'SELECT id, name, rank, level, xp, stats, penalty, proof FROM players WHERE id = $1',
     [id],
   );
   return rows?.[0] ? rowToPlayer(rows[0]) : null;
@@ -146,7 +148,7 @@ export async function getPlayer(id: string): Promise<Player | null> {
 /** All players (for the daily drop after a restart). */
 export async function listPlayers(limit = 100): Promise<Player[]> {
   const rows = await query<PlayerRow>(
-    'SELECT id, name, rank, level, xp, stats, penalty FROM players ORDER BY created_at ASC LIMIT $1',
+    'SELECT id, name, rank, level, xp, stats, penalty, proof FROM players ORDER BY created_at ASC LIMIT $1',
     [limit],
   );
   return (rows ?? []).map(rowToPlayer).filter((p): p is Player => p !== null);
@@ -162,6 +164,7 @@ const PATCH_COLUMNS: Record<keyof PlayerPatch, string> = {
   xp: 'xp',
   stats: 'stats',
   penalty: 'penalty',
+  proof: 'proof',
 };
 
 /** Updates the given fields and returns the new player (null if missing or DB off). */
@@ -172,10 +175,10 @@ export async function updatePlayer(id: string, patch: PlayerPatch): Promise<Play
   if (fields.length === 0) return getPlayer(id);
 
   const sets = fields.map((key, i) => `${PATCH_COLUMNS[key]} = $${i + 2}`);
-  const values = fields.map((key) => (key === 'stats' ? JSON.stringify(patch.stats) : patch[key]));
+  const values = fields.map((key) => (key === 'stats' || key === 'proof' ? JSON.stringify(patch[key]) : patch[key]));
   const rows = await query<PlayerRow>(
     `UPDATE players SET ${sets.join(', ')} WHERE id = $1
-     RETURNING id, name, rank, level, xp, stats, penalty`,
+     RETURNING id, name, rank, level, xp, stats, penalty, proof`,
     [id, ...values],
   );
   return rows?.[0] ? rowToPlayer(rows[0]) : null;
@@ -244,6 +247,7 @@ export async function migrate(): Promise<string[] | null> {
     `CREATE TABLE IF NOT EXISTS sleep_samples (
        player_id text NOT NULL, start_ts timestamptz NOT NULL, end_ts timestamptz NOT NULL, stage text NOT NULL,
        PRIMARY KEY (player_id, start_ts, end_ts, stage))`,
+    'ALTER TABLE players ADD COLUMN IF NOT EXISTS proof jsonb',
     `CREATE TABLE IF NOT EXISTS calibrations (
        player_id text NOT NULL, ts timestamptz NOT NULL, result jsonb NOT NULL, PRIMARY KEY (player_id, ts))`,
   ];
@@ -356,6 +360,32 @@ export async function leaderboard(limit = LEADERBOARD_SIZE): Promise<Leaderboard
     .map(rowToPlayer)
     .filter((p): p is Player => p !== null)
     .map(({ id, name, rank, level, xp }) => ({ id, name, rank, level, xp }));
+}
+
+export interface WeeklyRowDb {
+  id: string;
+  name: string;
+  rank: string;
+  level: number;
+  proof: Record<string, number> | null;
+  weeklyProof: number;
+}
+
+/** Proof earned in the last 7 days per player (verified events only unless includeDemo). */
+export async function weeklyLeaderboard(limit: number, includeDemo: boolean): Promise<WeeklyRowDb[] | null> {
+  const rows = await query<{ id: string; name: string | null; rank: string | null; level: number | null; proof: Record<string, number> | null; weekly: string | number | null }>(
+    `SELECT p.id, p.name, p.rank, p.level, p.proof, coalesce(w.weekly, 0) AS weekly
+     FROM players p
+     LEFT JOIN (
+       SELECT player_id, sum(value) AS weekly FROM events
+       WHERE kind = 'xp' AND ts >= now() - interval '7 days' AND (verified OR $2)
+       GROUP BY player_id) w ON w.player_id = p.id
+     ORDER BY weekly DESC, p.xp DESC LIMIT $1`,
+    [limit, includeDemo],
+  );
+  return rows === null
+    ? null
+    : rows.map((r) => ({ id: r.id, name: r.name ?? r.id, rank: r.rank ?? 'E', level: r.level ?? 1, proof: r.proof, weeklyProof: Number(r.weekly ?? 0) }));
 }
 
 /** XP per stat per day for the last `days` days (from the daily_xp continuous aggregate). */

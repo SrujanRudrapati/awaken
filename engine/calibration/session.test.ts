@@ -84,7 +84,7 @@ describe('Calibration session', () => {
     expect(result.scores.focus).toBeGreaterThan(90);
     expect(result.rank).toBe('D');
     const player = await getPlayer('p1');
-    expect(player).toMatchObject({ rank: 'D', xp: 100, stats: expect.objectContaining({ DISCIPLINE: 0, CHA: 0, INT: 4 }) });
+    expect(player).toMatchObject({ rank: 'D', xp: 228, stats: expect.objectContaining({ DISCIPLINE: 0, CHA: 0, INT: 4 }) });
     expect(db.insertCalibration).toHaveBeenCalledTimes(1);
 
     const stageEvents = events.filter((e) => e.type === 'calibration.stage');
@@ -114,7 +114,7 @@ describe('Calibration session', () => {
     await startCalibration('p1', { age: 25 });
     await runAll('p1', 0); // a weaker day
     const player = await getPlayer('p1');
-    expect(player?.xp).toBe(100 + RECALIBRATION_BONUS);
+    expect(player?.xp).toBe(228 + RECALIBRATION_BONUS); // D seed = 4 × 57 Proof
     expect(player?.rank).toBe('D');
     expect(events.filter((e) => e.type === 'calibration.complete').at(-1)).toMatchObject({ recalibration: true, bonusXp: RECALIBRATION_BONUS });
   });

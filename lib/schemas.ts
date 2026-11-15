@@ -35,6 +35,8 @@ export const QuestTypeSchema = z.enum([
   // Apple Watch sleep samples (Health Shortcut): "Lights out by HH:MM" and "Bedtime ±30 min of HH:MM"
   'lightsoutby',
   'bedtime',
+  // Phone Jail while reading + a timed trial on the chapter
+  'read',
   // AI-verified
   'photo',
   'gate',
@@ -129,6 +131,8 @@ export const QuestSchema = z.object({
   deadline: z.iso.datetime({ offset: true }),
   difficulty: DifficultySchema.optional(),
   kind: QuestKindSchema.optional(),
+  /** What was read (book / chapter) for a read vow. */
+  topic: z.string().trim().min(1).max(120).optional(),
   /** Local clock time "HH:MM" for lightsoutby / bedtime vows. */
   targetTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
 });
@@ -142,6 +146,8 @@ export const PlayerSchema = z.object({
   xp: z.number().int().min(0),
   stats: z.record(StatSchema, z.number().int().min(0)), // every stat required
   penalty: z.boolean(),
+  /** Proof earned per stat (drives Power → rank; see lib/power.ts). Missing = all 0. */
+  proof: z.record(StatSchema, z.number().min(0)).optional(),
 });
 export type Player = z.infer<typeof PlayerSchema>;
 
@@ -260,6 +266,20 @@ export const StreamEventSchema = z.discriminatedUnion('type', [
     playerId: Id,
     questId: Id.optional(),
     reason: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal('rank.up'),
+    playerId: Id,
+    fromRank: RankSchema,
+    toRank: RankSchema,
+    power: z.number().min(0),
+  }),
+  z.object({
+    type: z.literal('rank.passed'),
+    playerId: Id,
+    passedId: Id,
+    passedName: z.string().min(1),
+    weeklyProof: z.number().min(0),
   }),
   z.object({
     type: z.literal('calibration.stage'),
