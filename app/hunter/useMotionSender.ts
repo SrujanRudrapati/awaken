@@ -3,7 +3,7 @@
  * Streams the phone's accelerometer to POST /api/readings (source 'phone'): ~30 Hz samples,
  * one batch every 200 ms, tagged with the focused vow's sessionId (untagged readings count toward nothing).
  * start() must run inside a tap — iOS only grants motion access then.
- * Also holds a screen wake lock so the phone keeps sending from the armband.
+ * The screen wake lock lives in useWakeLock (held while a vow is active or the sensor streams).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Reading } from '../../lib/schemas';
@@ -22,14 +22,6 @@ async function requestMotionPermission(): Promise<boolean> {
     return (await request()) === 'granted';
   } catch {
     return false;
-  }
-}
-
-async function requestWakeLock(): Promise<WakeLockSentinel | null> {
-  try {
-    return (await navigator.wakeLock?.request('screen')) ?? null;
-  } catch {
-    return null; // not supported / low battery: the page still works, the screen may sleep
   }
 }
 
@@ -94,17 +86,9 @@ export function useMotionSender(
     };
     window.addEventListener('devicemotion', onMotion);
     const timer = setInterval(() => void flush(), FLUSH_INTERVAL_MS);
-    let wakeLock = await requestWakeLock();
-    const onVisible = async (): Promise<void> => {
-      if (document.visibilityState === 'visible' && !wakeLock) wakeLock = await requestWakeLock();
-    };
-    document.addEventListener('visibilitychange', onVisible);
     cleanup.current = () => {
       window.removeEventListener('devicemotion', onMotion);
-      document.removeEventListener('visibilitychange', onVisible);
       clearInterval(timer);
-      void wakeLock?.release().catch(() => {});
-      wakeLock = null;
       queue.current = [];
     };
     setStatus('streaming');
