@@ -4,6 +4,7 @@ vi.mock('../lib/db', () => ({ logEvent: vi.fn() }));
 vi.mock('../lib/device', () => ({ send: vi.fn().mockResolvedValue(true) }));
 
 import { PUSHUP_REP_MS, SQUAT_REP_MS, waveform } from '../bridge/simulator';
+import { jack, rest, times, trace } from './verifiers/motionTraces';
 import { subscribe } from '../lib/bus';
 import { logEvent } from '../lib/db';
 import type { Quest, Reading, StreamEvent } from '../lib/schemas';
@@ -134,12 +135,28 @@ describe('router', () => {
     ).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it.each(['jumpingjack', 'situp'] as const)('routes %s quests to the phone accel verifier', (type) => {
-    const session = setActiveQuest(quest({ type, target: 10 }));
+  it('routes situp quests to the phone accel verifier', () => {
+    const session = setActiveQuest(quest({ type: 'situp', target: 10 }));
 
     phoneReps(3).forEach((r) => routeReading(r, session));
 
     expect(getActiveQuest('p1')?.progress).toBe(3);
+  });
+
+  it('routes jumpingjack quests to the jack (arm-swing) counter', () => {
+    const session = setActiveQuest(quest({ type: 'jumpingjack', target: 10 }));
+
+    trace([rest(800), ...times(3, jack()), rest(800)]).forEach((r) => routeReading(r, session));
+
+    expect(getActiveQuest('p1')?.progress).toBe(3);
+  });
+
+  it('does not count squat motion as jumping jacks', () => {
+    const session = setActiveQuest(quest({ type: 'jumpingjack', target: 10 }));
+
+    phoneReps(3).forEach((r) => routeReading(r, session));
+
+    expect(getActiveQuest('p1')?.progress).toBe(0);
   });
 
   it('counts Watch accel readings like phone ones', () => {

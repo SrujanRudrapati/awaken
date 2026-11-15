@@ -18,11 +18,12 @@ import { publish } from '../lib/bus';
 import { logEvent } from '../lib/db';
 import { send } from '../lib/device';
 import type { DeviceCommand, Quest, QuestType, Reading, Source } from '../lib/schemas';
-import { AccelRepCounter, type AccelExercise } from './verifiers/accelReps';
+import type { AccelExercise } from './verifiers/accelReps';
 import { JailVerifier } from './verifiers/jail';
 import { LightsOutVerifier } from './verifiers/lightsout';
 import { MeditateVerifier } from './verifiers/meditate';
 import { PadPushupCounter } from './verifiers/padPushup';
+import { createRepCounter } from './verifiers/repCounter';
 import type { Verifier, VerifierEvent, VerifierQuest } from './verifiers/types';
 
 type VerifierFactory = (quest: VerifierQuest) => Verifier;
@@ -32,8 +33,8 @@ type SourceVerifiers = Partial<Record<Source, Verifier>>;
 const watchCounted: VerifierFactory = () => ({ push: () => [] });
 
 const accel = (exercise: AccelExercise): Partial<Record<Source, VerifierFactory>> => ({
-  phone: () => new AccelRepCounter(exercise),
-  watch: () => new AccelRepCounter(exercise),
+  phone: () => createRepCounter(exercise),
+  watch: () => createRepCounter(exercise),
 });
 
 /** Which source can verify which quest type. Missing = no sensor verifier (yet). */
