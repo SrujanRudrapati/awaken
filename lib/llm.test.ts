@@ -52,8 +52,11 @@ describe('llm', () => {
     expect(await claude({ system: 's', prompt: 'p' })).toBe('Rise.');
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({ model: HAIKU, output_config: { effort: 'low' } }),
-      { timeout: 8_000 },
+      { timeout: expect.any(Number) },
     );
+    const { timeout } = create.mock.calls[0][1] as { timeout: number };
+    expect(timeout).toBeGreaterThan(7_500); // what's left of the 8 s budget
+    expect(timeout).toBeLessThanOrEqual(8_000);
   });
 
   it('null on refusal, truncation or a thrown error', async () => {
