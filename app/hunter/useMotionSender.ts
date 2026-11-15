@@ -1,0 +1,105 @@
+'use client';
+/**
+ * Streams the phone's accelerometer to POST /api/readings (source 'phone'): ~30 Hz samples,
+ * one batch every 200 ms. start() must run inside a tap — iOS only grants motion access then.
+ * Also holds a screen wake lock so the phone keeps sending from the armband.
+ */
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Reading } from '../../lib/schemas';
+import { FLUSH_INTERVAL_MS, shouldKeep, takeBatch, toReading } from './motion';
+
+export type MotionStatus = 'idle' | 'requesting' | 'streaming' | 'denied' | 'unsupported' | 'offline';
+
+type PermissionFn = () => Promise<'granted' | 'denied'>;
+
+async function requestMotionPermission(): Promise<boolean> {
+  const ctor = typeof DeviceMotionEvent === 'undefined' ? undefined : DeviceMotionEvent;
+  if (!ctor) return false;
+  const request = (ctor as unknown as { requestPermission?: PermissionFn }).requestPermission;
+  if (typeof request !== 'function') return true; // Android / desktop: no prompt
+  try {
+    return (await request()) === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+async function requestWakeLock(): Promise<WakeLockSentinel | null> {
+  try {
+    return (await navigator.wakeLock?.request('screen')) ?? null;
+  } catch {
+    return null; // not supported / low battery: the page still works, the screen may sleep
+  }
+}
+
+export function useMotionSender(): { status: MotionStatus; sent: number; start: () => Promise<void>; stop: () => void } {
+  const [status, setStatus] = useState<MotionStatus>('idle');
+  const [sent, setSent] = useState(0);
+  const queue = useRef<Reading[]>([]);
+  const lastKept = useRef<number | null>(null);
+  const cleanup = useRef<() => void>(() => {});
+
+  const flush = useCallback(async () => {
+    const { batch, rest } = takeBatch(queue.current);
+    if (batch.length === 0) return;
+    queue.current = rest;
+    try {
+      const res = await fetch('/api/readings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(batch),
+        keepalive: true,
+      });
+      setStatus(res.ok ? 'streaming' : 'offline');
+      if (res.ok) setSent((n) => n + batch.length);
+    } catch {
+      setStatus('offline'); // keep sampling; the next flush retries with fresh data
+    }
+  }, []);
+
+  const stop = useCallback(() => {
+    cleanup.current();
+    cleanup.current = () => {};
+    setStatus('idle');
+  }, []);
+
+  const start = useCallback(async () => {
+    setStatus('requesting');
+    if (typeof window === 'undefined' || !('DeviceMotionEvent' in window)) {
+      setStatus('unsupported');
+      return;
+    }
+    if (!(await requestMotionPermission())) {
+      setStatus('denied');
+      return;
+    }
+    const onMotion = (event: DeviceMotionEvent): void => {
+      const now = performance.now();
+      if (!shouldKeep(lastKept.current, now)) return;
+      const reading = toReading(event.accelerationIncludingGravity, now);
+      if (!reading) return;
+      lastKept.current = now;
+      queue.current = [...queue.current, reading];
+    };
+    window.addEventListener('devicemotion', onMotion);
+    const timer = setInterval(() => void flush(), FLUSH_INTERVAL_MS);
+    let wakeLock = await requestWakeLock();
+    const onVisible = async (): Promise<void> => {
+      if (document.visibilityState === 'visible' && !wakeLock) wakeLock = await requestWakeLock();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    cleanup.current = () => {
+      window.removeEventListener('devicemotion', onMotion);
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(timer);
+      void wakeLock?.release().catch(() => {});
+      wakeLock = null;
+      queue.current = [];
+    };
+    setStatus('streaming');
+  }, [flush]);
+
+  useEffect(() => () => cleanup.current(), []);
+
+  return { status, sent, start, stop };
+}

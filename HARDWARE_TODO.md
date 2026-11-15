@@ -143,3 +143,18 @@ Punch quests can only be counted by the Watch.
   → `progress` 1, 2, 3 and `rep` events on `/api/stream`.
 - [ ] On the real Watch: start a squat quest, do 5 squats → dashboard shows 5; haptic per rep.
 - [ ] Airplane-mode the Watch for 3 reps, reconnect, do 1 more → count catches up (no lost reps).
+
+---
+
+## Phase 7C — iPhone `/hunter` armband page
+
+- [ ] With the tunnel up (Phase 7B), open `PUBLIC_URL/hunter?player=demo-jin` in **Safari** on the iPhone
+      (no `?player` → registration form; the id is remembered on the phone).
+- [ ] Tap **AWAKEN** → allow *Motion & Orientation*. Status should read `SENSOR LINKED · N samples` (N climbing ~30/s).
+      Denied by mistake? Settings › Apps › Safari › Motion & Orientation Access → on, reload.
+- [ ] Start a squat quest (buttons on the page, or from the dashboard), tap **COUNT ON THIS PHONE ▸** if shown.
+      Strap the phone to the upper arm/thigh; first **2 slow squats calibrate**, then each full squat = +1.
+      A half squat flashes `✕ NOT DEEP ENOUGH`.
+- [ ] Reach the target → blue `[QUEST COMPLETE]` overlay; on rank-up a gold `[LEVEL UP] Rank D` overlay.
+- [ ] Screen should stay on while streaming (wake lock). If it dims, set Auto-Lock to Never for the demo.
+- [ ] Arm push-ups from the phone: start a push-up quest, phone on the upper arm.
