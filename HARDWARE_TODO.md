@@ -351,3 +351,17 @@ Re-running is safe (samples dedupe on start + end + stage).
 - Note (2026-11-14 live run): the sleep line came back as a canned one (Haiku timed out or broke format once); the
   Calibration line from Haiku worked. If it keeps happening, raise `VOICE_TIMEOUT_MS` in `engine/agents/voice.ts`.
 
+---
+
+## Phase E — Calibration (~5 min onboarding)
+
+`POST /api/calibration/start {playerId, age?, bodyVariant?: pushup|wallpushup|chairsquat, includeHealth?}` then
+`POST /api/calibration/submit` per stage (see FRONTEND_CONTRACT.md). Body and Vitality are 60 s windows counted by the real
+sensors (pad / phone / Watch); Mind is a 2-min adaptive Gemini quiz; Focus is a 60 s go/no-go. Starting rank E–C (never higher).
+Tiger table `calibrations` (applied 2026-11-14). Re-calibration every 30 days (+50 Proof); `DEMO_MODE=1` allows it any time.
+
+- [ ] **Restart `npm run dev`** after pulling — a long-running dev server kept an old `lib/db.ts` (2026-11-14: Calibration
+      start failed with "Internal error" until hardened; a restart picks up all new exports).
+- [ ] Live run on the Home Base pad (body) + phone armband jumping jacks (vitality), then mind + focus from the UI.
+      Expect `calibration.stage` events (started/done) and `calibration.complete` with the starting rank.
+

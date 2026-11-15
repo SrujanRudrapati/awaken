@@ -69,6 +69,7 @@ export function momentFor(event: StreamEvent, seenQuestIds: Set<string>): Moment
       if (quest.kind === 'emergency') return { type: 'emergency', playerId: quest.playerId, facts: `Urgent vow: "${quest.title}".` };
       if (quest.kind === 'daily') return { type: 'daily', playerId: quest.playerId, facts: "Today's vows were issued." };
       if (quest.kind === 'penalty') return null; // the `penalty` event already speaks for it
+      if (quest.kind === 'calibration') return null; // Calibration announces its own stages
       return { type: 'quest.start', playerId: quest.playerId, facts: `Vow started: "${quest.title}".` };
     }
     case 'rep.rejected':

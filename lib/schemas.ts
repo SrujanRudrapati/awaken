@@ -45,8 +45,8 @@ export type QuestType = z.infer<typeof QuestTypeSchema>;
 export const DifficultySchema = z.enum(['easy', 'normal', 'hard']);
 export type Difficulty = z.infer<typeof DifficultySchema>;
 
-/** daily = midnight drop · emergency = timed surprise · penalty = harder retry after a failure. */
-export const QuestKindSchema = z.enum(['daily', 'manual', 'emergency', 'penalty']);
+/** daily = midnight drop · emergency = timed surprise · penalty = harder retry after a failure · calibration = onboarding measurement (no Proof). */
+export const QuestKindSchema = z.enum(['daily', 'manual', 'emergency', 'penalty', 'calibration']);
 export type QuestKind = z.infer<typeof QuestKindSchema>;
 
 /** cancelled = switched away from (no penalty); failed = missed (Penalty Zone). */
@@ -260,6 +260,24 @@ export const StreamEventSchema = z.discriminatedUnion('type', [
     playerId: Id,
     questId: Id.optional(),
     reason: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal('calibration.stage'),
+    playerId: Id,
+    stage: z.enum(['body', 'vitality', 'mind', 'focus']),
+    status: z.enum(['started', 'done']),
+    score: z.number().int().min(0).max(100).optional(),
+    detail: z.string().optional(),
+    endsAt: z.iso.datetime({ offset: true }).optional(),
+  }),
+  z.object({
+    type: z.literal('calibration.complete'),
+    playerId: Id,
+    rank: RankSchema,
+    overall: z.number().int().min(0).max(100),
+    scores: z.object({ body: z.number(), vitality: z.number(), mind: z.number(), focus: z.number() }),
+    recalibration: z.boolean(),
+    bonusXp: z.number().int().min(0),
   }),
   z.object({
     type: z.literal('sleep.summary'),

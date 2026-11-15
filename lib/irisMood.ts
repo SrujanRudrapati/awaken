@@ -12,6 +12,7 @@ export function moodFor(event: StreamEvent): IrisMood {
   switch (event.type) {
     case 'levelup':
     case 'quest.complete':
+    case 'calibration.complete':
       return 'proud';
     case 'penalty':
       return 'furious';

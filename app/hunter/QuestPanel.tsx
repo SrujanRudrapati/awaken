@@ -43,7 +43,7 @@ export function QuestPanel({ quest, isFocused, rejection, isBusy, onFocus, onSta
 
   const isEmergency = quest.kind === 'emergency';
   const pct = Math.min(100, Math.round((quest.progress / quest.target) * 100));
-  const header = isEmergency ? '[URGENT VOW]' : quest.kind === 'penalty' ? '[RECKONING VOW]' : quest.kind === 'daily' ? "[TODAY'S VOW]" : '[VOW]';
+  const header = isEmergency ? '[URGENT VOW]' : quest.kind === 'calibration' ? '[CALIBRATION]' : quest.kind === 'penalty' ? '[RECKONING VOW]' : quest.kind === 'daily' ? "[TODAY'S VOW]" : '[VOW]';
   const accent = isEmergency || quest.kind === 'penalty' ? 'text-[#EF4444]' : 'text-[#38BDF8]';
 
   return (

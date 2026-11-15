@@ -229,7 +229,7 @@ function buildQuest(playerId: string, input: NewQuestInput): Quest {
     type: input.type,
     target,
     progress: 0,
-    xp: xpFor(input.type, difficulty),
+    xp: input.kind === 'calibration' ? 0 : xpFor(input.type, difficulty),
     status: 'active',
     deadline: (input.deadline ?? (NIGHT_VOW_TYPES.includes(input.type) ? nextMorningDeadline(new Date()) : endOfDay(new Date()))).toISOString(),
     difficulty,
@@ -303,6 +303,38 @@ export async function startQuest(playerId: string, input: NewQuestInput | { ques
   }
   const existing = input.kind === undefined ? findResumable(playerId, input.type) : undefined;
   return launch(existing ?? storeQuest(buildQuest(playerId, input)));
+}
+
+// ── Calibration hooks ───────────────────────────────────────────────────────
+
+/** Stops an active vow without reward or penalty (e.g. a Calibration measurement window ended). */
+export function cancelQuest(playerId: string, questId: string): Quest {
+  const active = requireActiveQuest(playerId, questId);
+  stopQuest(active);
+  const cancelled = storeQuest({ ...withLiveProgress(active), status: 'cancelled' });
+  publish({ type: 'quest.update', quest: cancelled });
+  return cancelled;
+}
+
+/**
+ * First Calibration: starting stats + starting Proof (which sets rank and level). Never lowers
+ * anything — a re-calibration only raises stats that measured higher.
+ */
+export async function applyCalibration(playerId: string, seed: { stats: Player['stats']; xp: number }): Promise<Player> {
+  const player = await requirePlayer(playerId);
+  const stats = Object.fromEntries(StatSchema.options.map((s) => [s, Math.max(player.stats[s], seed.stats[s])])) as Player['stats'];
+  const xp = Math.max(player.xp, seed.xp);
+  return savePlayer({ ...player, stats, xp, level: levelForXp(xp), rank: rankForXp(xp) });
+}
+
+/** Bonus Proof outside a vow (e.g. re-calibration). Announces an Ascension if it causes one. */
+export async function grantProof(playerId: string, amount: number, reason: string): Promise<Player> {
+  const player = await requirePlayer(playerId);
+  const xp = player.xp + Math.max(0, Math.round(amount));
+  const updated = savePlayer({ ...player, xp, level: levelForXp(xp), rank: rankForXp(xp) });
+  db.logEvent({ playerId, kind: 'xp', value: xp - player.xp, source: 'engine', detail: { reason } });
+  if (updated.level > player.level) announceLevelUp(player, updated);
+  return updated;
 }
 
 // ── Completion, level-up, failure ───────────────────────────────────────────

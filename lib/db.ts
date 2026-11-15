@@ -244,6 +244,8 @@ export async function migrate(): Promise<string[] | null> {
     `CREATE TABLE IF NOT EXISTS sleep_samples (
        player_id text NOT NULL, start_ts timestamptz NOT NULL, end_ts timestamptz NOT NULL, stage text NOT NULL,
        PRIMARY KEY (player_id, start_ts, end_ts, stage))`,
+    `CREATE TABLE IF NOT EXISTS calibrations (
+       player_id text NOT NULL, ts timestamptz NOT NULL, result jsonb NOT NULL, PRIMARY KEY (player_id, ts))`,
   ];
   for (const sql of statements) {
     if ((await query(sql)) === null) return null;
@@ -279,6 +281,38 @@ export async function listSleepSamples(playerId: string, since: Date): Promise<S
     [playerId, since],
   );
   return rows === null ? null : rows.map((r) => ({ start: new Date(r.start_ts), end: new Date(r.end_ts), stage: r.stage }));
+}
+
+// ── Calibration (baselines) ─────────────────────────────────────────────────
+
+export async function insertCalibration(playerId: string, at: Date, result: Record<string, unknown>): Promise<boolean | null> {
+  const rows = await query(`INSERT INTO calibrations (player_id, ts, result) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [
+    playerId,
+    at,
+    JSON.stringify(result),
+  ]);
+  return rows === null ? null : true;
+}
+
+export async function latestCalibration(playerId: string): Promise<{ at: Date; result: Record<string, unknown> } | null> {
+  const rows = await query<{ ts: Date; result: Record<string, unknown> }>(
+    `SELECT ts, result FROM calibrations WHERE player_id = $1 ORDER BY ts DESC LIMIT 1`,
+    [playerId],
+  );
+  return rows?.[0] ? { at: new Date(rows[0].ts), result: rows[0].result } : null;
+}
+
+/** Mean of the per-day maximum of a health metric (Shortcut totals arrive several times a day). */
+export async function dailyAverage(playerId: string, kind: string, days: number): Promise<number | null> {
+  const rows = await query<{ avg: string | number | null }>(
+    `SELECT avg(day_max) AS avg FROM (
+       SELECT max(value) AS day_max FROM events
+       WHERE player_id = $1 AND kind = $2 AND ts >= now() - make_interval(days => $3)
+       GROUP BY date_trunc('day', ts)) d`,
+    [playerId, kind, days],
+  );
+  const value = rows?.[0]?.avg;
+  return value === null || value === undefined ? null : Number(value);
 }
 
 // ── Demo reset ──────────────────────────────────────────────────────────────

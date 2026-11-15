@@ -157,6 +157,7 @@ describe('db', () => {
     queryMock.mockResolvedValue({ rows: [] });
     const applied = await migrate();
     expect(applied?.[0]).toBe('ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb');
+    expect(applied?.[2]).toMatch(/CREATE TABLE IF NOT EXISTS calibrations/);
     expect(applied?.[1]).toMatch(/CREATE TABLE IF NOT EXISTS sleep_samples[\s\S]*PRIMARY KEY \(player_id, start_ts, end_ts, stage\)/);
 
     delete process.env.TIGER_DATABASE_URL;
