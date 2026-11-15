@@ -313,3 +313,41 @@ Everything is gated on env vars; nothing breaks if a step is skipped. Put the va
       lean toward the goal / weak stats (compare with `npm run smoke:designer`).
 - Note: `npm run demo:reset` does **not** clear Supermemory, so a demo player keeps its history across resets.
   To wipe it: Supermemory console → delete namespace `player_demo-jin`.
+
+---
+
+## Phase D — Sleep from Apple Watch (Health Shortcut)
+
+Backend: `POST /api/health` with `{"type":"sleep","samples":[{start,end,stage}]}` (idempotent), `GET /api/sleep?playerId=…&days=7`,
+Tiger table `sleep_samples` (created by `npm run db:migrate`, applied 2026-11-14). Vows: `lightsoutby` ("Lights out by HH:MM"),
+`bedtime` ("Bedtime HH:MM ± 30 min"), `sleep` (7 h+, Vitality, bonus Proof for deep sleep above your own baseline after 3 nights).
+Night vows stay open until **noon the next day** and are judged by the morning sync. Morning: SSE `sleep.summary` + a sleepy Iris line.
+
+**iPhone Shortcut "Send Sleep to Iris"** (Shortcuts app → + → name it):
+1. **Find Health Samples** → type **Sleep Analysis** · *Start Date* **is in the last 1 day** · Sort by Start Date, Oldest First · no limit.
+2. **Repeat with Each** item in *Health Samples*:
+   - **Dictionary** with three Text keys:
+     `start` = Repeat Item → *Start Date* (Format: ISO 8601, Include Time),
+     `end` = Repeat Item → *End Date* (ISO 8601, Include Time),
+     `stage` = Repeat Item → *Value* (gives "In Bed", "Core", "Deep", "REM", "Awake", "Asleep" — any case is fine).
+   - (the Dictionary is the Repeat's output)
+3. After **End Repeat**: **Dictionary** → `type` (Text) = `sleep`, `playerId` (Text) = your id (or set `HEALTH_PLAYER_ID` on the server and skip it),
+   `samples` (Array) = **Repeat Results**.
+4. **Get Contents of URL** → `PUBLIC_URL/api/health` · Method **POST** · Headers: `X-Sync-Token` = SYNC_TOKEN,
+   `Content-Type` = `application/json` · Request Body **File** = the Dictionary from step 3.
+5. **Show Result** (first runs only) → expect `"success":true` and `lastNight` with your bedtime/wake.
+6. Automation → **Time of Day 08:00** (or *When I stop the Sleep Focus*) → run "Send Sleep to Iris", *Run Immediately*.
+Re-running is safe (samples dedupe on start + end + stage).
+
+- [ ] Run the Shortcut once after a real night → `curl "localhost:3000/api/sleep?playerId=<id>"` shows the night.
+- [ ] **Demo without a Watch:** create a person + vows, then inject tonight's sleep:
+  ```bash
+  curl -X POST localhost:3000/api/quest/start -H 'content-type: application/json' -d '{"playerId":"demo-jin","type":"lightsoutby","targetTime":"23:45"}'
+  npm run demo:sleep -- demo-jin --tonight          # 23:35 → 06:55, 7 h 13 min, 2 awakenings
+  npm run demo:sleep -- demo-jin --tonight --short  # 00:55 → ~06:00 (try on another person: lighter Body vows next drop)
+  ```
+  Verified live 2026-11-14: lights-out + bedtime kept, 7 h vow kept, `sleep.summary` + sleepy voice on the stream.
+- [ ] Room confirmation: with the Home Base running, turn the lights off within 15 min of falling asleep → lights-out vow +10 Proof.
+- Note (2026-11-14 live run): the sleep line came back as a canned one (Haiku timed out or broke format once); the
+  Calibration line from Haiku worked. If it keeps happening, raise `VOICE_TIMEOUT_MS` in `engine/agents/voice.ts`.
+

@@ -155,7 +155,9 @@ describe('db', () => {
 
   it('migrate adds the nullable detail column idempotently (null without a database)', async () => {
     queryMock.mockResolvedValue({ rows: [] });
-    expect(await migrate()).toEqual(['ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb']);
+    const applied = await migrate();
+    expect(applied?.[0]).toBe('ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb');
+    expect(applied?.[1]).toMatch(/CREATE TABLE IF NOT EXISTS sleep_samples[\s\S]*PRIMARY KEY \(player_id, start_ts, end_ts, stage\)/);
 
     delete process.env.TIGER_DATABASE_URL;
     resetDb();

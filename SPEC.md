@@ -113,6 +113,7 @@ Laptop → Home Base (one per line, `DeviceCommandSchema`): `SEG:<4 chars>`, `LO
 
 ### SSE events (backend → web app)
 `reading`, `rep`, `rep.rejected` (half-rep → "REP NOT COUNTED"), `quest.update`, `quest.complete`, `levelup`, `penalty`, `voice`. Payloads: `StreamEventSchema` in `lib/schemas.ts`.
+Added 2026-11-14: `sleep.summary` (`{playerId, summary: NightSummary, line, irisMood:"sleepy"}`, once per night). Every event on the wire carries `irisMood` (watching|unimpressed|proud|furious|sleepy).
 `voice` may carry `audioUrl` (Polly MP3 at `/api/voice/<hash>.mp3`); without it the browser speaks the text (`lib/voicePlayback.ts`).
 
 ### Verifiers (code, not AI — must be reliable)

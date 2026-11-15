@@ -6,6 +6,8 @@
 import { z } from 'zod';
 import { geminiJson } from '../../lib/llm';
 import { recall } from '../../lib/memory';
+import type { NightSummary } from '../../lib/schemas';
+import { nightFacts } from '../sleep';
 import { DifficultySchema, QuestTypeSchema, type Player, type QuestType } from '../../lib/schemas';
 import { DAILY_TEMPLATES, QUEST_RULES, type QuestTemplate } from '../progression';
 import type { QuestDesigner } from '../quests';
@@ -55,12 +57,36 @@ export function recallForDesigner(player: Player): Promise<string | null> {
 export interface DesignerOptions {
   /** Extra context (e.g. Supermemory recall) appended to the prompt. */
   context?: (player: Player) => Promise<string | null>;
+  /** Last night from the Watch (null if unknown). Short sleep → lighter Body vows + a lights-out vow. */
+  sleep?: (player: Player) => Promise<NightSummary | null>;
+}
+
+/** Under this much sleep the day is designed lighter. */
+export const SHORT_SLEEP_MINUTES = 6 * 60;
+const BODY_TYPES: readonly QuestType[] = DESIGNABLE_TYPES.filter((t) => QUEST_RULES[t].stat === 'STR');
+
+/** Deterministic: after a short night, Body vows drop to easy and a lights-out vow is guaranteed. */
+export function adjustForSleep(templates: readonly QuestTemplate[], night: NightSummary | null): readonly QuestTemplate[] {
+  if (!night || night.asleepMinutes >= SHORT_SLEEP_MINUTES) return templates;
+  const lighter = templates.map((t) => (BODY_TYPES.includes(t.type) ? { ...t, difficulty: 'easy' as const } : t));
+  if (lighter.some((t) => t.type === 'lightsoutby')) return lighter;
+  const lightsOut: QuestTemplate = { type: 'lightsoutby', difficulty: 'normal' };
+  return lighter.length >= MAX_DAILY ? [...lighter.slice(0, MAX_DAILY - 1), lightsOut] : [...lighter, lightsOut];
 }
 
 export function createGeminiDesigner(options: DesignerOptions = {}): QuestDesigner {
   return async (player) => {
-    const extra = (await options.context?.(player).catch(() => null)) ?? null;
-    const prompt = extra ? `${describe(player)}\nWhat Iris remembers: ${extra}` : describe(player);
-    return validateDesign(await geminiJson({ system: SYSTEM, prompt }, DesignSchema)) ?? DAILY_TEMPLATES;
+    const [extra, night] = await Promise.all([
+      options.context?.(player).catch(() => null) ?? null,
+      options.sleep?.(player).catch(() => null) ?? null,
+    ]);
+    const parts = [describe(player)];
+    if (extra) parts.push(`What Iris remembers: ${extra}`);
+    if (night) {
+      const short = night.asleepMinutes < SHORT_SLEEP_MINUTES;
+      parts.push(`${nightFacts(night)}${short ? ' That is short: keep Body vows light and include a lightsoutby vow.' : ''}`);
+    }
+    const designed = validateDesign(await geminiJson({ system: SYSTEM, prompt: parts.join('\n') }, DesignSchema)) ?? DAILY_TEMPLATES;
+    return adjustForSleep(designed, night ?? null);
   };
 }

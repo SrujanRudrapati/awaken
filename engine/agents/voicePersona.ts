@@ -30,6 +30,7 @@ export type VoiceEventType =
   | 'quest.complete'
   | 'quest.start'
   | 'daily'
+  | 'sleep'
   | 'rep.rejected';
 
 /** Iris's mood for each kind of line (sent as `irisMood`). */
@@ -41,6 +42,7 @@ export const VOICE_MOODS: Record<VoiceEventType, IrisMood> = {
   'quest.complete': 'proud',
   'quest.start': 'watching',
   daily: 'watching',
+  sleep: 'sleepy',
   'rep.rejected': 'unimpressed',
 };
 
@@ -71,6 +73,10 @@ export const CANNED_LINES: Record<VoiceEventType, readonly string[]> = {
   ],
   'quest.start': ['[calm] A vow begins. I am counting every one.', '[dismissive] You said you would. Prove it.'],
   daily: ["[calm] Today's vows are set. I will check every one.", '[sighs] New day, same promises. Keep them this time.'],
+  sleep: [
+    '[sighs] I watched you sleep. [slowly] Some of it even counted.',
+    '[whispers] Last night is on the record. Do better or do it again.',
+  ],
   'rep.rejected': ['[dismissive] That does not count. Again.', '[sighs] Half a rep is a rumor. Again.'],
 };
 

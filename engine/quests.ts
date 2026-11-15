@@ -15,15 +15,19 @@ import { notify } from '../lib/notify';
 import { StatSchema, type Difficulty, type Player, type Quest, type QuestKind, type QuestType } from '../lib/schemas';
 import {
   DAILY_TEMPLATES,
+  DEFAULT_TARGET_TIME,
   HARDER,
+  NIGHT_VOW_TYPES,
   QUEST_RULES,
   defaultTitle,
   endOfDay,
   demoRankUpXp,
   levelForXp,
+  nextMorningDeadline,
   rankForXp,
   rankSegment,
   segNumber,
+  TIMED_SLEEP_TYPES,
   xpFor,
   type QuestTemplate,
 } from './progression';
@@ -208,25 +212,29 @@ export interface NewQuestInput {
   title?: string;
   deadline?: Date;
   kind?: QuestKind;
+  /** "HH:MM" for lightsoutby / bedtime (defaults to DEFAULT_TARGET_TIME). */
+  targetTime?: string;
 }
 
 function buildQuest(playerId: string, input: NewQuestInput): Quest {
   const difficulty = input.difficulty ?? 'normal';
   const demoJail = isDemoMode() && input.type === 'jail' ? DEMO_JAIL_SECONDS : undefined;
   const target = input.target ?? demoJail ?? QUEST_RULES[input.type].target[difficulty];
+  const targetTime = TIMED_SLEEP_TYPES.includes(input.type) ? (input.targetTime ?? DEFAULT_TARGET_TIME) : undefined;
   return {
     id: randomUUID(),
     playerId,
     stat: QUEST_RULES[input.type].stat,
-    title: input.title ?? defaultTitle(input.type, target),
+    title: input.title ?? defaultTitle(input.type, target, targetTime),
     type: input.type,
     target,
     progress: 0,
     xp: xpFor(input.type, difficulty),
     status: 'active',
-    deadline: (input.deadline ?? endOfDay(new Date())).toISOString(),
+    deadline: (input.deadline ?? (NIGHT_VOW_TYPES.includes(input.type) ? nextMorningDeadline(new Date()) : endOfDay(new Date()))).toISOString(),
     difficulty,
     kind: input.kind ?? 'manual',
+    ...(targetTime ? { targetTime } : {}),
   };
 }
 
@@ -305,13 +313,19 @@ export interface CompletionResult {
   leveledUp: boolean;
 }
 
+export interface CompleteOptions {
+  /** Extra Proof on top of the vow's XP (e.g. deep sleep above baseline). Recorded in quest.xp. */
+  bonusXp?: number;
+}
+
 /** Awards XP (+1 stat) for an active quest. Internal: sensor quests reach this only via the router. */
-async function awardQuest(playerId: string, questId: string): Promise<CompletionResult> {
+async function awardQuest(playerId: string, questId: string, options: CompleteOptions = {}): Promise<CompletionResult> {
   await requirePlayer(playerId);
   const active = requireActiveQuest(playerId, questId);
   const player = cachedPlayer(playerId) as Player; // re-read after the await: no lost updates
   stopQuest(active);
-  const quest = storeQuest({ ...active, status: 'done', progress: Math.max(active.progress, active.target) });
+  const bonus = Math.max(0, Math.round(options.bonusXp ?? 0));
+  const quest = storeQuest({ ...active, status: 'done', progress: Math.max(active.progress, active.target), xp: active.xp + bonus });
 
   const xp = player.xp + quest.xp;
   const penaltyCleared = quest.kind === 'penalty' && !hasActivePenaltyQuest(playerId);
@@ -355,12 +369,12 @@ export async function setQuestProgress(playerId: string, questId: string, progre
  * Completes a non-sensor quest (health / quiz / photo / gate) once its own verifier passed.
  * Sensor quests are refused: only the router's deterministic verifiers may complete them.
  */
-export async function completeQuest(playerId: string, questId: string): Promise<CompletionResult> {
+export async function completeQuest(playerId: string, questId: string, options: CompleteOptions = {}): Promise<CompletionResult> {
   const quest = getQuest(questId);
   if (quest && hasSensorVerifier(quest.type)) {
     throw new QuestError(`Vow ${questId} is measured by sensors; only the sensors can complete it`, 409);
   }
-  return awardQuest(playerId, questId);
+  return awardQuest(playerId, questId, options);
 }
 
 function hasActivePenaltyQuest(playerId: string): boolean {
@@ -581,18 +595,18 @@ export async function dailyDrop(now = new Date(), design: QuestDesigner = templa
     if (!getState().players.has(p.id)) getState().players.set(p.id, p);
   });
 
-  const todayDeadline = endOfDay(now).toISOString();
+  const deadlineFor = (type: QuestType): Date => (NIGHT_VOW_TYPES.includes(type) ? nextMorningDeadline(now) : endOfDay(now));
   const dropped: Record<string, Quest[]> = {};
   for (const player of getState().players.values()) {
     const templates = await design(player).catch(() => DAILY_TEMPLATES);
     const droppedToday = new Set(
       listQuests(player.id)
-        .filter((q) => q.kind === 'daily' && q.deadline === todayDeadline)
+        .filter((q) => q.kind === 'daily' && q.deadline === deadlineFor(q.type).toISOString())
         .map((q) => q.type),
     );
     const quests = templates
       .filter((t) => !droppedToday.has(t.type))
-      .map((t) => storeQuest(buildQuest(player.id, { ...t, kind: 'daily', deadline: endOfDay(now) })));
+      .map((t) => storeQuest(buildQuest(player.id, { ...t, kind: 'daily', deadline: deadlineFor(t.type) })));
     quests.forEach((quest) => publish({ type: 'quest.update', quest }));
     dropped[player.id] = quests;
   }

@@ -4,6 +4,7 @@
  * (401 otherwise, including when CRON_SECRET is unset).
  */
 import { createGeminiDesigner, recallForDesigner } from '../../../../engine/agents/designer';
+import { lastNightFor } from '../../../../engine/sleepSync';
 import { dailyDrop } from '../../../../engine/quests';
 import { ok } from '../../../../lib/api-response';
 import { requireCronSecret } from '../../_lib/auth';
@@ -13,7 +14,7 @@ export async function POST(request: Request): Promise<Response> {
   const denied = requireCronSecret(request);
   if (denied) return denied;
   try {
-    const dropped = await dailyDrop(new Date(), createGeminiDesigner({ context: recallForDesigner }));
+    const dropped = await dailyDrop(new Date(), createGeminiDesigner({ context: recallForDesigner, sleep: (player) => lastNightFor(player.id) }));
     const counts = Object.fromEntries(Object.entries(dropped).map(([id, quests]) => [id, quests.length]));
     return ok({ players: Object.keys(dropped).length, quests: counts });
   } catch (error) {

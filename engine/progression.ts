@@ -55,7 +55,9 @@ export const QUEST_RULES: Record<QuestType, QuestRule> = {
   run: { stat: 'VIT', baseXp: 40, target: { easy: 1, normal: 3, hard: 5 }, unit: 'km', title: 'Run' },
   steps: { stat: 'VIT', baseXp: 25, target: { easy: 5000, normal: 8000, hard: 12000 }, unit: 'steps', title: 'Steps' },
   workout: { stat: 'STR', baseXp: 35, target: { easy: 15, normal: 30, hard: 60 }, unit: 'minutes', title: 'Workout' },
-  sleep: { stat: 'DISCIPLINE', baseXp: 30, target: { easy: 6, normal: 7, hard: 8 }, unit: 'hours', title: 'Sleep' },
+  sleep: { stat: 'VIT', baseXp: 30, target: { easy: 6, normal: 7, hard: 8 }, unit: 'hours', title: 'Sleep' },
+  lightsoutby: { stat: 'DISCIPLINE', baseXp: 25, target: { easy: 1, normal: 1, hard: 1 }, unit: 'night', title: 'Lights out by' },
+  bedtime: { stat: 'DISCIPLINE', baseXp: 25, target: { easy: 1, normal: 1, hard: 1 }, unit: 'night', title: 'Bedtime on target' },
   photo: { stat: 'DISCIPLINE', baseXp: 20, target: { easy: 1, normal: 1, hard: 1 }, unit: 'photo', title: 'Photo proof' },
   gate: { stat: 'CHA', baseXp: 60, target: { easy: 1, normal: 1, hard: 1 }, unit: 'field vow', title: 'Field Vow' },
   quiz: { stat: 'INT', baseXp: 30, target: { easy: 1, normal: 1, hard: 1 }, unit: 'trial', title: 'Mind Trial' },
@@ -65,8 +67,14 @@ export function xpFor(type: QuestType, difficulty: Difficulty): number {
   return Math.round(QUEST_RULES[type].baseXp * DIFFICULTY_MULTIPLIER[difficulty]);
 }
 
-export function defaultTitle(type: QuestType, target: number): string {
+/** Default local bedtime for lightsoutby / bedtime vows when none is given. */
+export const DEFAULT_TARGET_TIME = '23:00';
+export const TIMED_SLEEP_TYPES: readonly QuestType[] = ['lightsoutby', 'bedtime'];
+
+export function defaultTitle(type: QuestType, target: number, targetTime?: string): string {
   const rule = QUEST_RULES[type];
+  if (type === 'lightsoutby') return `Lights out by ${targetTime ?? DEFAULT_TARGET_TIME}`;
+  if (type === 'bedtime') return `Bedtime ${targetTime ?? DEFAULT_TARGET_TIME} ± 30 min`;
   return `${rule.title}: ${target} ${rule.unit}`;
 }
 
@@ -92,6 +100,25 @@ export function rankSegment(rank: Rank): `SEG:${string}` {
 /** 4-char right-aligned number for the display, clamped to 0..9999. */
 export function segNumber(n: number): `SEG:${string}` {
   return `SEG:${String(Math.max(0, Math.min(9999, Math.round(n)))).padStart(4, ' ')}`;
+}
+
+/** Vows judged from last night's sleep stay open until this hour the next day (the morning sync). */
+export const SLEEP_VOW_DEADLINE_HOUR = 12;
+export const NIGHT_VOW_TYPES: readonly QuestType[] = ['lightsoutby', 'bedtime', 'sleep'];
+
+/** Noon (SLEEP_VOW_DEADLINE_HOUR) of the day after `now`. */
+export function nextMorningDeadline(now: Date): Date {
+  const d = new Date(now);
+  d.setDate(d.getDate() + 1);
+  d.setHours(SLEEP_VOW_DEADLINE_HOUR, 0, 0, 0);
+  return d;
+}
+
+/** The evening (local YYYY-MM-DD) a night vow is about: the day before its deadline. */
+export function nightOfVow(deadlineIso: string): string {
+  const d = new Date(deadlineIso);
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** End of the local day containing `now`. */

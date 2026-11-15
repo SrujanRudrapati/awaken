@@ -16,7 +16,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "voice:pregen": "tsx scripts/voice-pregen.ts",
     "smoke:memory": "tsx scripts/smoke-memory.ts",
-    "hw:check": "tsx scripts/hw-check.ts"
+    "hw:check": "tsx scripts/hw-check.ts",
+    "demo:sleep": "tsx scripts/demo-sleep.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

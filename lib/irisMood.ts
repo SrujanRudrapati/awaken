@@ -19,6 +19,8 @@ export function moodFor(event: StreamEvent): IrisMood {
       return 'unimpressed';
     case 'voice':
       return event.irisMood ?? 'watching';
+    case 'sleep.summary':
+      return 'sleepy';
     default:
       return 'watching';
   }
@@ -26,5 +28,5 @@ export function moodFor(event: StreamEvent): IrisMood {
 
 /** The event as sent over SSE: always with `irisMood`. */
 export function withMood(event: StreamEvent): StreamEvent & { irisMood: IrisMood } {
-  return { ...event, irisMood: moodFor(event) };
+  return { ...event, irisMood: moodFor(event) } as StreamEvent & { irisMood: IrisMood }; // moodFor keeps sleep.summary "sleepy"
 }

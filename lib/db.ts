@@ -239,12 +239,46 @@ export function logEvent(event: GameEvent): void {
 
 /** Idempotent, additive schema changes on top of SPEC's tables. Null when no database. */
 export async function migrate(): Promise<string[] | null> {
-  const statements = ['ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb'];
+  const statements = [
+    'ALTER TABLE events ADD COLUMN IF NOT EXISTS detail jsonb',
+    `CREATE TABLE IF NOT EXISTS sleep_samples (
+       player_id text NOT NULL, start_ts timestamptz NOT NULL, end_ts timestamptz NOT NULL, stage text NOT NULL,
+       PRIMARY KEY (player_id, start_ts, end_ts, stage))`,
+  ];
   for (const sql of statements) {
     if ((await query(sql)) === null) return null;
   }
   detailColumnMissing = false;
   return statements;
+}
+
+// ── Sleep samples (Apple Watch via Health Shortcut) ──────────────────────────
+
+export interface SleepSampleRow {
+  start: Date;
+  end: Date;
+  stage: string;
+}
+
+/** Idempotent insert (dedupe on player + start + end + stage). Null when no database. */
+export async function insertSleepSamples(playerId: string, samples: readonly SleepSampleRow[]): Promise<number | null> {
+  if (samples.length === 0) return 0;
+  const values = samples.map((_, i) => `($1, $${i * 3 + 2}, $${i * 3 + 3}, $${i * 3 + 4})`).join(', ');
+  const params = [playerId, ...samples.flatMap((s) => [s.start, s.end, s.stage])];
+  const rows = await query<{ start_ts: Date }>(
+    `INSERT INTO sleep_samples (player_id, start_ts, end_ts, stage) VALUES ${values}
+     ON CONFLICT DO NOTHING RETURNING start_ts`,
+    params,
+  );
+  return rows === null ? null : rows.length;
+}
+
+export async function listSleepSamples(playerId: string, since: Date): Promise<SleepSampleRow[] | null> {
+  const rows = await query<{ start_ts: Date; end_ts: Date; stage: string }>(
+    `SELECT start_ts, end_ts, stage FROM sleep_samples WHERE player_id = $1 AND start_ts >= $2 ORDER BY start_ts ASC`,
+    [playerId, since],
+  );
+  return rows === null ? null : rows.map((r) => ({ start: new Date(r.start_ts), end: new Date(r.end_ts), stage: r.stage }));
 }
 
 // ── Demo reset ──────────────────────────────────────────────────────────────

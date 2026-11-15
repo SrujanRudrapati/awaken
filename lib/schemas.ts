@@ -32,6 +32,9 @@ export const QuestTypeSchema = z.enum([
   'steps',
   'workout',
   'sleep',
+  // Apple Watch sleep samples (Health Shortcut): "Lights out by HH:MM" and "Bedtime ±30 min of HH:MM"
+  'lightsoutby',
+  'bedtime',
   // AI-verified
   'photo',
   'gate',
@@ -126,6 +129,8 @@ export const QuestSchema = z.object({
   deadline: z.iso.datetime({ offset: true }),
   difficulty: DifficultySchema.optional(),
   kind: QuestKindSchema.optional(),
+  /** Local clock time "HH:MM" for lightsoutby / bedtime vows. */
+  targetTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
 });
 export type Quest = z.infer<typeof QuestSchema>;
 
@@ -158,6 +163,68 @@ export const HealthSyncSchema = z.object({
   avgHeartRate: z.coerce.number().finite().min(20).max(250).optional(),
 });
 export type HealthSync = z.infer<typeof HealthSyncSchema>;
+
+// ── Apple Watch sleep samples (Shortcut → POST /api/health with type "sleep") ─
+
+export const SleepStageSchema = z.enum(['InBed', 'Awake', 'Core', 'Deep', 'REM', 'Asleep']);
+export type SleepStage = z.infer<typeof SleepStageSchema>;
+
+/**
+ * Shortcut "Sleep Analysis" values, any case/spacing: "In Bed", "Asleep Core", "Core",
+ * "Asleep (Unspecified)", "rem", "AWAKE"… → one SleepStage. Unknown → undefined.
+ */
+export function normalizeSleepStage(raw: unknown): SleepStage | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const key = raw.toLowerCase().replace(/[^a-z]/g, '');
+  const table: Record<string, SleepStage> = {
+    inbed: 'InBed', awake: 'Awake', core: 'Core', asleepcore: 'Core', light: 'Core', deep: 'Deep', asleepdeep: 'Deep',
+    rem: 'REM', asleeprem: 'REM', asleep: 'Asleep', asleepunspecified: 'Asleep', unspecified: 'Asleep',
+  };
+  return table[key];
+}
+
+/** Shortcut dates: ISO 8601, or its default "Nov 14, 2026 at 11:42 PM" (local time). */
+export function parseShortcutDate(raw: unknown): Date | undefined {
+  if (typeof raw !== 'string' && typeof raw !== 'number') return undefined;
+  const text = typeof raw === 'string' ? raw.replace(/\s+at\s+/i, ' ').replace(/\u202f/g, ' ').trim() : raw;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+const MAX_SLEEP_SAMPLES = 2_000;
+const MAX_SAMPLE_HOURS = 24;
+
+export const SleepSampleSchema = z
+  .object({
+    start: z.unknown().transform(parseShortcutDate).pipe(z.date()),
+    end: z.unknown().transform(parseShortcutDate).pipe(z.date()),
+    stage: z.unknown().transform(normalizeSleepStage).pipe(SleepStageSchema),
+  })
+  .refine((s) => s.end > s.start && s.end.getTime() - s.start.getTime() <= MAX_SAMPLE_HOURS * 3_600_000, {
+    message: 'end must be after start, within 24 h',
+  });
+export type SleepSample = z.infer<typeof SleepSampleSchema>;
+
+export const SleepSyncSchema = z.object({
+  type: z.string().transform((t) => t.toLowerCase()).pipe(z.literal('sleep')),
+  playerId: Id.max(64).optional(),
+  samples: z.array(SleepSampleSchema).max(MAX_SLEEP_SAMPLES),
+});
+export type SleepSync = z.infer<typeof SleepSyncSchema>;
+
+/** One night (sleep starting 18:00–06:00 local), computed from samples. Minutes are whole numbers. */
+export const NightSummarySchema = z.object({
+  night: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // local date of the evening
+  bedtime: z.iso.datetime({ offset: true }), // start of the first asleep sample
+  wake: z.iso.datetime({ offset: true }), // end of the last asleep sample
+  asleepMinutes: z.number().int().min(0),
+  deepMinutes: z.number().int().min(0),
+  remMinutes: z.number().int().min(0),
+  coreMinutes: z.number().int().min(0),
+  awakenings: z.number().int().min(0),
+  inBedMinutes: z.number().int().min(0),
+});
+export type NightSummary = z.infer<typeof NightSummarySchema>;
 
 // ── SSE stream events (names fixed — see SPEC §3) ───────────────────────────
 
@@ -193,6 +260,14 @@ export const StreamEventSchema = z.discriminatedUnion('type', [
     playerId: Id,
     questId: Id.optional(),
     reason: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal('sleep.summary'),
+    playerId: Id,
+    summary: NightSummarySchema,
+    /** Iris on last night (tags stripped; the matching `voice` event carries the audio). */
+    line: z.string().min(1),
+    irisMood: z.literal('sleepy'),
   }),
   z.object({
     type: z.literal('voice'),

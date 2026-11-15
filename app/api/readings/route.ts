@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import '../../../engine/quests'; // registers the engine as the router's completion handler
 import { routeReading } from '../../../engine/router';
+import { recordLight } from '../../../lib/homebaseLight';
 import { fail, ok } from '../../../lib/api-response';
 import { publish } from '../../../lib/bus';
 import { ReadingSchema } from '../../../lib/schemas';
@@ -46,6 +47,7 @@ export async function POST(request: Request): Promise<Response> {
   const readings = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
 
   for (const reading of readings) {
+    recordLight(reading); // dark-room minutes confirm Watch "lights out" vows
     try {
       routeReading(reading);
     } catch (error) {

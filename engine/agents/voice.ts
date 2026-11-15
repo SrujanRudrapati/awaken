@@ -32,10 +32,11 @@ const PRIORITY: Record<VoiceEventType, number> = {
   'quest.complete': 2,
   'quest.start': 1,
   daily: 1,
+  sleep: 1,
   'rep.rejected': 0,
 };
 
-interface Moment {
+export interface Moment {
   type: VoiceEventType;
   playerId?: string;
   facts: string;
@@ -77,10 +78,13 @@ export function momentFor(event: StreamEvent, seenQuestIds: Set<string>): Moment
   }
 }
 
-function canned(state: VoiceState, type: VoiceEventType): string {
+let detachedCannedIndex = -1;
+
+function canned(type: VoiceEventType): string {
   const lines = CANNED_LINES[type];
-  state.cannedIndex += 1;
-  return lines[state.cannedIndex % lines.length];
+  const state = globalForVoice.__awakenVoice;
+  const index = state ? (state.cannedIndex += 1) : (detachedCannedIndex += 1);
+  return lines[index % lines.length];
 }
 
 async function promptFor(moment: Moment): Promise<string> {
@@ -89,7 +93,8 @@ async function promptFor(moment: Moment): Promise<string> {
   return `Event: ${moment.type}. ${moment.facts}${callback}\nAnnounce it.`;
 }
 
-async function speak(state: VoiceState, moment: Moment): Promise<void> {
+/** Iris's (tagged) line for a moment: Haiku, else a canned one. rep.rejected is canned only. */
+export async function composeLine(moment: Moment): Promise<string> {
   const line =
     moment.type === 'rep.rejected'
       ? null
@@ -101,7 +106,15 @@ async function speak(state: VoiceState, moment: Moment): Promise<void> {
             timeoutMs: VOICE_TIMEOUT_MS,
           }),
         );
-  const tagged = line ?? canned(state, moment.type);
+  return line ?? canned(moment.type);
+}
+
+async function speak(moment: Moment): Promise<void> {
+  await sayLine(moment, await composeLine(moment));
+}
+
+/** Synthesizes a tagged line and publishes the `voice` event (display text has no tags). */
+export async function sayLine(moment: Moment, tagged: string): Promise<void> {
   const audioUrl = (await synthesize(tagged)) ?? undefined; // ElevenLabs gets the tags; Polly/browser don't
   publish({
     type: 'voice',
@@ -129,7 +142,7 @@ function queueMoment(state: VoiceState, moment: Moment | null): void {
     const chosen = state.pending;
     state.pending = null;
     state.timer = null;
-    if (chosen) void speak(state, chosen);
+    if (chosen) void speak(chosen);
   }, VOICE_WINDOW_MS);
 }
 
