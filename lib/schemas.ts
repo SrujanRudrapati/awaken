@@ -127,6 +127,25 @@ export const PlayerSchema = z.object({
 });
 export type Player = z.infer<typeof PlayerSchema>;
 
+// ── Apple Health sync (iPhone Shortcut → POST /api/health) ──────────────────
+
+/** Shortcuts may send numbers as text — coerce, then bound to sane human values. */
+const healthNumber = (max: number) => z.coerce.number().finite().min(0).max(max).optional();
+
+export const HealthSyncSchema = z.object({
+  /** Optional: falls back to HEALTH_PLAYER_ID (the Shortcut belongs to one phone). */
+  playerId: Id.max(64).optional(),
+  /** The day the totals are for, as the Shortcut formats it (informational). */
+  date: z.string().max(40).optional(),
+  steps: healthNumber(200_000),
+  distanceKm: healthNumber(300),
+  activeKcal: healthNumber(20_000),
+  workoutMinutes: healthNumber(24 * 60),
+  sleepHours: healthNumber(24),
+  avgHeartRate: z.coerce.number().finite().min(20).max(250).optional(),
+});
+export type HealthSync = z.infer<typeof HealthSyncSchema>;
+
 // ── SSE stream events (names fixed — see SPEC §3) ───────────────────────────
 
 export const StreamEventSchema = z.discriminatedUnion('type', [

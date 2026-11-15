@@ -326,6 +326,22 @@ async function awardQuest(playerId: string, questId: string): Promise<Completion
 }
 
 /**
+ * Records partial progress on a non-sensor quest (e.g. 5 200 of 8 000 steps). Never lowers it.
+ * Sensor quests are refused, like completeQuest.
+ */
+export async function setQuestProgress(playerId: string, questId: string, progress: number): Promise<Quest> {
+  await requirePlayer(playerId);
+  const active = requireActiveQuest(playerId, questId);
+  if (hasSensorVerifier(active.type)) {
+    throw new QuestError(`Quest ${questId} is a sensor quest; only the sensors can count it`, 409);
+  }
+  if (progress <= active.progress) return active;
+  const quest = storeQuest({ ...active, progress: Math.min(progress, active.target) });
+  publish({ type: 'quest.update', quest });
+  return quest;
+}
+
+/**
  * Completes a non-sensor quest (health / quiz / photo / gate) once its own verifier passed.
  * Sensor quests are refused: only the router's deterministic verifiers may complete them.
  */

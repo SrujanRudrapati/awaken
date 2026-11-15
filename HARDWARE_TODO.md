@@ -97,3 +97,29 @@ Sent on: daily drop `[DAILY QUEST HAS ARRIVED]`, `[EMERGENCY QUEST]` (urgent), `
 - [ ] With the app: `POST /api/quest/emergency` for a demo player → `[EMERGENCY QUEST]` on the Watch within ~2 s.
 - [ ] iPhone locked + Watch on wrist: urgent alerts (emergency/penalty) still come through. If Focus mode blocks
       them, allow ntfy in Focus settings.
+
+---
+
+## Phase 7C — Apple Health Shortcut → `POST /api/health`
+
+Endpoint needs `X-Sync-Token: <SYNC_TOKEN>` (401 otherwise). Body (all metrics optional, numbers or numeric text):
+`{"playerId":"<id>","date":"2026-11-15","steps":8123,"distanceKm":3.2,"activeKcal":410,"workoutMinutes":35,"sleepHours":7.4,"avgHeartRate":72}`
+Omit `playerId` if `.env.local` has `HEALTH_PLAYER_ID=<id>`. Completes active run (km) / steps / workout (min) / sleep (h) quests
+that reached their target; partial totals show as progress.
+
+- [ ] Test first from the laptop:
+  ```bash
+  curl -X POST $PUBLIC_URL/api/health -H "X-Sync-Token: $SYNC_TOKEN" -H 'content-type: application/json' \
+    -d '{"playerId":"demo-jin","steps":9000}'
+  ```
+  → `completed` lists the steps quest (if the player has one: `POST /api/quest/start {"playerId":"demo-jin","type":"steps"}`).
+- [ ] iPhone Shortcuts → **New Shortcut** "Sync with System":
+  1. *Find Health Samples* — Steps, start date **is today** → *Calculate Statistics* Sum → variable `steps`
+  2. Same for Walking + Running Distance (km) → `distanceKm`, Active Energy → `activeKcal`
+  3. *Find Health Samples* Workouts today → *Calculate Statistics* Sum of Duration (minutes) → `workoutMinutes`
+  4. *Find Health Samples* Sleep Analysis, start date **is in the last 1 day**, value Asleep → Sum of Duration (hours) → `sleepHours`
+  5. *Get Contents of URL* `PUBLIC_URL/api/health`, Method **POST**, Headers `X-Sync-Token` = SYNC_TOKEN,
+     Request Body **JSON**: keys above as **Number** fields, plus `playerId` (Text).
+  6. *Show Result* (handy while testing).
+- [ ] Run it once; allow Health access. Response `"success":true`.
+- [ ] Optional automations: Shortcuts → Automation → *When a workout ends* and *Time of day 9 PM* → run "Sync with System".
