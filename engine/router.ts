@@ -2,17 +2,36 @@
  * Routes sensor readings to the active quest's verifier and publishes the results
  * (`rep`, `rep.rejected`, `quest.update`, `quest.complete`) on the bus.
  *
- * One device, so readings belong to whichever player most recently started a quest.
- * Verifiers are pure code — nothing here asks an LLM whether a rep counted.
+ * Readings belong to whichever player most recently started a quest. Each quest gets one
+ * verifier per sensor source that can verify it (VERIFIERS below) — e.g. push-ups count
+ * from the Home Base pad or from the phone armband — and every source's reps add to the
+ * same progress. Verifiers are pure code — nothing here asks an LLM whether a rep counted.
  * XP, level-ups and penalties are the quest engine's job (Phase 7), not the router's.
  *
  * State lives on globalThis: Next bundles each route separately and hot-reloads modules.
  */
 import { publish } from '../lib/bus';
-import type { Quest, QuestType, Reading } from '../lib/schemas';
-import { PushupCounter, assertPushupCalibration, type PushupCalibration } from './verifiers/pushup';
-import { SquatCounter } from './verifiers/squat';
+import type { Quest, QuestType, Reading, Source } from '../lib/schemas';
+import { AccelRepCounter, type AccelExercise } from './verifiers/accelReps';
+import { PadPushupCounter } from './verifiers/padPushup';
 import type { Verifier, VerifierEvent } from './verifiers/types';
+
+type VerifierFactory = () => Verifier;
+type SourceVerifiers = Partial<Record<Source, Verifier>>;
+
+const accel = (exercise: AccelExercise): Partial<Record<Source, VerifierFactory>> => ({
+  phone: () => new AccelRepCounter(exercise),
+  watch: () => new AccelRepCounter(exercise),
+});
+
+/** Which source can verify which quest type. Missing = no sensor verifier (yet). */
+const VERIFIERS: Partial<Record<QuestType, Partial<Record<Source, VerifierFactory>>>> = {
+  pushup: { homebase: () => new PadPushupCounter(), ...accel('armPushup') },
+  squat: accel('squat'),
+  jumpingjack: accel('jumpingjack'),
+  situp: accel('situp'),
+  // jail / meditate / lightsout arrive in Phase 8
+};
 
 /** Until the quest-start API lands (Phase 7), an idle device runs this practice quest. */
 export const PRACTICE_PLAYER_ID = 'demo';
@@ -22,20 +41,19 @@ const PRACTICE_DEADLINE_MS = 24 * 60 * 60 * 1000;
 
 interface ActiveEntry {
   quest: Quest;
-  /** null = quest type has no sensor verifier (yet). */
-  verifier: Verifier | null;
+  /** One fresh verifier per source that can verify this quest type. */
+  verifiers: SourceVerifiers;
 }
 
 interface RouterState {
   active: Map<string, ActiveEntry>;
   currentPlayerId: string | null;
-  calibration: PushupCalibration | null;
 }
 
 const globalForRouter = globalThis as typeof globalThis & { __awakenRouter?: RouterState };
 
 function freshState(): RouterState {
-  return { active: new Map(), currentPlayerId: null, calibration: null };
+  return { active: new Map(), currentPlayerId: null };
 }
 
 function getState(): RouterState {
@@ -43,19 +61,16 @@ function getState(): RouterState {
   return globalForRouter.__awakenRouter;
 }
 
-/** Test hook: forget all quests and calibration. */
+/** Test hook: forget all quests. */
 export function resetRouter(): void {
   globalForRouter.__awakenRouter = freshState();
 }
 
-function createVerifier(type: QuestType, calibration: PushupCalibration | null): Verifier | null {
-  if (type === 'pushup') {
-    const counter = new PushupCounter();
-    if (calibration) counter.calibrate(calibration.upDist, calibration.downDist);
-    return counter;
-  }
-  if (type === 'squat') return new SquatCounter();
-  return null; // jail / meditate / lightsout / water arrive in Phase 8
+function createVerifiers(type: QuestType): SourceVerifiers {
+  const factories = VERIFIERS[type] ?? {};
+  return Object.fromEntries(
+    Object.entries(factories).map(([source, create]) => [source, create()]),
+  ) as SourceVerifiers;
 }
 
 function practiceQuest(): Quest {
@@ -82,7 +97,7 @@ export function setActiveQuest(quest: Quest): void {
   if (quest.playerId !== PRACTICE_PLAYER_ID) state.active.delete(PRACTICE_PLAYER_ID);
   state.active.set(quest.playerId, {
     quest: { ...quest },
-    verifier: createVerifier(quest.type, state.calibration),
+    verifiers: createVerifiers(quest.type),
   });
   state.currentPlayerId = quest.playerId;
 }
@@ -97,20 +112,6 @@ export function clearActiveQuest(playerId: string): void {
   if (state.currentPlayerId === playerId) state.currentPlayerId = null;
 }
 
-export function getPushupCalibration(): PushupCalibration | null {
-  return getState().calibration;
-}
-
-/** Stores the calibration and applies it to running and future push-up quests. Throws RangeError if unusable. */
-export function calibratePushup(upDist: number, downDist: number): void {
-  assertPushupCalibration(upDist, downDist);
-  const state = getState();
-  state.calibration = { upDist, downDist };
-  for (const { verifier } of state.active.values()) {
-    if (verifier instanceof PushupCounter) verifier.calibrate(upDist, downDist);
-  }
-}
-
 function currentEntry(state: RouterState): ActiveEntry {
   const current = state.currentPlayerId ? state.active.get(state.currentPlayerId) : undefined;
   if (current) return current;
@@ -118,12 +119,13 @@ function currentEntry(state: RouterState): ActiveEntry {
   return state.active.get(PRACTICE_PLAYER_ID) as ActiveEntry;
 }
 
-function applyRep(state: RouterState, entry: ActiveEntry, count: number): void {
+function applyRep(state: RouterState, entry: ActiveEntry): void {
   const { id: questId, playerId } = entry.quest;
   const quest: Quest = { ...entry.quest, progress: entry.quest.progress + 1 };
   state.active.set(playerId, { ...entry, quest });
 
-  publish({ type: 'rep', playerId, questId, count });
+  // Count = quest progress, so reps from several sources add up to one number.
+  publish({ type: 'rep', playerId, questId, count: quest.progress });
   publish({ type: 'quest.update', quest });
 
   if (quest.progress < quest.target) return;
@@ -135,7 +137,7 @@ function handle(state: RouterState, playerId: string, event: VerifierEvent): voi
   const entry = state.active.get(playerId);
   if (!entry) return; // quest completed earlier in this batch of events
   if (event.type === 'rep') {
-    applyRep(state, entry, event.count);
+    applyRep(state, entry);
     return;
   }
   publish({ type: 'rep.rejected', playerId, questId: entry.quest.id, reason: event.reason });
@@ -144,8 +146,9 @@ function handle(state: RouterState, playerId: string, event: VerifierEvent): voi
 export function routeReading(reading: Reading): void {
   const state = getState();
   const entry = currentEntry(state);
-  if (!entry.verifier) return;
-  for (const event of entry.verifier.push(reading)) {
+  const verifier = entry.verifiers[reading.source];
+  if (!verifier) return; // this source can't verify this quest type
+  for (const event of verifier.push(reading)) {
     handle(state, entry.quest.playerId, event);
   }
 }

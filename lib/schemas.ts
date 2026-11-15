@@ -18,6 +18,8 @@ export type Rank = z.infer<typeof RankSchema>;
 export const QuestTypeSchema = z.enum([
   'pushup',
   'squat',
+  'jumpingjack',
+  'situp',
   'jail',
   'meditate',
   'lightsout',
@@ -34,54 +36,49 @@ export type QuestStatus = z.infer<typeof QuestStatusSchema>;
 const Id = z.string().min(1);
 const AnalogSchema = z.number().min(0).max(1023);
 
-// ── Device → laptop (one JSON line every 100 ms) ────────────────────────────
+// ── Sensor sources → laptop ─────────────────────────────────────────────────
 
-/** Not strict: extra firmware fields are stripped, not rejected. */
+/** Where a reading came from: Home Base (Arduino over serial), iPhone `/hunter`, or Apple Watch. */
+export const SourceSchema = z.enum(['homebase', 'phone', 'watch']);
+export type Source = z.infer<typeof SourceSchema>;
+
+/**
+ * One sample from any source. Every sensor field is optional — the Home Base sends
+ * pad/jail/btn/light/snd(/accel), the phone and Watch send only accel.
+ * Not strict: extra fields are stripped, not rejected. `source` defaults to 'homebase'
+ * so raw firmware JSON is accepted as-is.
+ */
 export const ReadingSchema = z.object({
-  t: z.number().min(0), // ms since boot
-  dist: z.number().min(0), // cm
-  ax: z.number(), // g
-  ay: z.number(),
-  az: z.number(),
-  jail: BitSchema,
-  touch: BitSchema,
-  light: AnalogSchema,
-  snd: AnalogSchema,
-  bottle: BitSchema,
-  btn: BitSchema,
+  t: z.number().min(0), // ms since boot / page load
+  source: SourceSchema.default('homebase'),
+  pad: BitSchema.optional(), // push-up pad switch (D3)
+  ax: z.number().optional(), // g
+  ay: z.number().optional(),
+  az: z.number().optional(),
+  jail: BitSchema.optional(), // IR: phone present in the jail (D6)
+  btn: BitSchema.optional(), // button (D2)
+  light: AnalogSchema.optional(), // A1
+  snd: AnalogSchema.optional(), // A0
 });
 export type Reading = z.infer<typeof ReadingSchema>;
 
-// ── Laptop → device (one command per line) ──────────────────────────────────
-
-export const ColorSchema = z.enum(['blue', 'red', 'gold', 'green']);
-export type Color = z.infer<typeof ColorSchema>;
+// ── Laptop → Home Base (one command per line) ───────────────────────────────
 
 export const BuzzSchema = z.enum(['alarm', 'chime', 'tick']);
 export type Buzz = z.infer<typeof BuzzSchema>;
 
-/** Grove LCD RGB Backlight is 16×2. */
-export const LCD_LINE_MAX = 16;
-const LCD_PATTERN = new RegExp(`^LCD:[^|\\n\\r]{0,${LCD_LINE_MAX}}\\|[^|\\n\\r]{0,${LCD_LINE_MAX}}$`);
+/** Grove 4-digit display shows exactly 4 characters. */
 const SEG_PATTERN = /^SEG:[^\n\r]{4}$/;
-
-const LcdCommandSchema = z
-  .templateLiteral(['LCD:', z.string(), '|', z.string()])
-  .refine((cmd) => LCD_PATTERN.test(cmd), {
-    message: `LCD lines must be ≤${LCD_LINE_MAX} chars with no '|' or newline`,
-  });
 
 const SegCommandSchema = z
   .templateLiteral(['SEG:', z.string()])
   .refine((cmd) => SEG_PATTERN.test(cmd), { message: 'SEG needs exactly 4 chars' });
 
 export const DeviceCommandSchema = z.union([
-  LcdCommandSchema,
-  z.templateLiteral(['COLOR:', ColorSchema]),
+  SegCommandSchema,
   z.literal('LOCK'),
   z.literal('UNLOCK'),
   z.templateLiteral(['BUZZ:', BuzzSchema]),
-  SegCommandSchema,
 ]);
 export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 

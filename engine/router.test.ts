@@ -5,10 +5,8 @@ import type { Quest, Reading, StreamEvent } from '../lib/schemas';
 import {
   PRACTICE_PLAYER_ID,
   PRACTICE_QUEST_ID,
-  calibratePushup,
   clearActiveQuest,
   getActiveQuest,
-  getPushupCalibration,
   resetRouter,
   routeReading,
   setActiveQuest,
@@ -29,8 +27,12 @@ const quest = (overrides: Partial<Quest> = {}): Quest => ({
   ...overrides,
 });
 
-const pushups = (n: number): Reading[] => withRest(waveform('pushup', n * PUSHUP_REP_MS));
-const squats = (n: number): Reading[] => withRest(waveform('squat', n * SQUAT_REP_MS));
+/** Home Base pad push-ups. */
+const pushups = (n: number): Reading[] => withRest(waveform('pushup', n * PUSHUP_REP_MS), 'pushup');
+/** Phone-armband squats: 2 calibration reps, then every 4th is half depth. */
+const squats = (n: number): Reading[] => withRest(waveform('squat', n * SQUAT_REP_MS), 'squat');
+/** The same phone motion, as arm push-ups. */
+const phoneReps = squats;
 
 describe('router', () => {
   let events: StreamEvent[];
@@ -80,9 +82,9 @@ describe('router', () => {
   });
 
   it('passes through rep.rejected for shallow reps without adding progress', () => {
-    setActiveQuest(quest({ target: 10 }));
+    setActiveQuest(quest({ type: 'squat', target: 10 }));
 
-    pushups(4).forEach(routeReading); // 4th simulator rep is shallow
+    squats(4).forEach(routeReading); // 4th simulator squat is half depth
 
     expect(forQuest('q1').at(-1)).toEqual({
       type: 'rep.rejected',
@@ -102,13 +104,41 @@ describe('router', () => {
     expect(original.progress).toBe(0);
   });
 
-  it('routes squat quests to the squat verifier', () => {
+  it('counts squats from the phone and ignores the Home Base pad for squat quests', () => {
     setActiveQuest(quest({ id: 'q2', type: 'squat', target: 5 }));
 
     squats(3).forEach(routeReading);
+    expect(getActiveQuest('p1')?.progress).toBe(3);
+
+    pushups(2).forEach(routeReading); // pad presses mean nothing to a squat quest
+    expect(getActiveQuest('p1')?.progress).toBe(3);
+  });
+
+  it('adds push-ups from the pad and from the phone armband into one count', () => {
+    setActiveQuest(quest({ target: 10 }));
+
+    pushups(2).forEach(routeReading);
+    phoneReps(3).forEach(routeReading); // armPushup: 2 calibration reps + 1
+
+    expect(getActiveQuest('p1')?.progress).toBe(5);
+    expect(
+      forQuest('q1').flatMap((e) => (e.type === 'rep' ? [e.count] : [])),
+    ).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it.each(['jumpingjack', 'situp'] as const)('routes %s quests to the phone accel verifier', (type) => {
+    setActiveQuest(quest({ type, target: 10 }));
+
+    phoneReps(3).forEach(routeReading);
 
     expect(getActiveQuest('p1')?.progress).toBe(3);
-    pushups(2).forEach(routeReading); // distance changes mean nothing to a squat quest
+  });
+
+  it('counts Watch accel readings like phone ones', () => {
+    setActiveQuest(quest({ type: 'squat', target: 10 }));
+
+    squats(3).map((r) => ({ ...r, source: 'watch' as const })).forEach(routeReading);
+
     expect(getActiveQuest('p1')?.progress).toBe(3);
   });
 
@@ -159,27 +189,5 @@ describe('router', () => {
     setActiveQuest(quest());
 
     expect(getActiveQuest(PRACTICE_PLAYER_ID)).toBeUndefined();
-  });
-
-  it('applies calibration to the active and to later push-up quests', () => {
-    const tall = (n: number): Reading[] =>
-      pushups(n).map((r) => ({ ...r, dist: 20 + ((r.dist - 10) * 40) / 30 }));
-    setActiveQuest(quest({ target: 10 }));
-
-    calibratePushup(60, 20);
-    tall(2).forEach(routeReading);
-    setActiveQuest(quest({ id: 'q9', target: 10 }));
-    tall(2).forEach(routeReading);
-
-    expect(getPushupCalibration()).toEqual({ upDist: 60, downDist: 20 });
-    expect(forQuest('q1').filter((e) => e.type === 'rep')).toHaveLength(2);
-    expect(getActiveQuest('p1')?.progress).toBe(2);
-  });
-
-  it('rejects an invalid calibration and keeps the old one', () => {
-    calibratePushup(50, 15);
-
-    expect(() => calibratePushup(20, 15)).toThrow(RangeError);
-    expect(getPushupCalibration()).toEqual({ upDist: 50, downDist: 15 });
   });
 });

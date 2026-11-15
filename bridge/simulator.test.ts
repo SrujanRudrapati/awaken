@@ -2,15 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { ReadingSchema } from '../lib/schemas';
 import {
   JAIL_DURATION_MS,
-  PUSHUP_FULL_CM,
   PUSHUP_REP_MS,
-  PUSHUP_SHALLOW_CM,
-  PUSHUP_TOP_CM,
-  SQUAT_PEAK_G,
+  SQUAT_FULL_DEPTH_G,
   SQUAT_REP_MS,
+  SQUAT_REST_G,
   parseMode,
-  pushupBottom,
   readingAt,
+  squatDepth,
   waveform,
 } from './simulator';
 
@@ -18,7 +16,7 @@ describe('simulator waveforms', () => {
   it('emits schema-valid readings for every mode', () => {
     for (const mode of ['pushup', 'squat', 'jail', 'idle'] as const) {
       for (const r of waveform(mode, 5_000)) {
-        expect(ReadingSchema.safeParse(r).success).toBe(true);
+        expect(ReadingSchema.parse(r)).toEqual(r);
       }
     }
   });
@@ -29,33 +27,17 @@ describe('simulator waveforms', () => {
     expect(w.map((r) => r.t)).toEqual([0, 100, 200, 300, 400, 500, 600, 700, 800, 900]);
   });
 
-  it('push-up: 40 → 10 → 40 cm over 1.5 s', () => {
-    expect(readingAt('pushup', 0).dist).toBeCloseTo(PUSHUP_TOP_CM);
-    expect(readingAt('pushup', PUSHUP_REP_MS / 2).dist).toBeCloseTo(PUSHUP_FULL_CM);
-    expect(readingAt('pushup', PUSHUP_REP_MS).dist).toBeCloseTo(PUSHUP_TOP_CM);
+  it('push-up: Home Base pad pressed once per 1.5 s with one bounce sample on each edge', () => {
+    const rep = waveform('pushup', PUSHUP_REP_MS).map((r) => r.pad);
+    expect(rep).toEqual([0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 0]);
+    expect(waveform('pushup', 3 * PUSHUP_REP_MS).every((r) => r.source === 'homebase')).toBe(true);
   });
 
-  it('push-up: every 4th rep only reaches 22 cm', () => {
-    expect([1, 2, 3, 4, 5, 8, 12].map(pushupBottom)).toEqual([10, 10, 10, 22, 10, 22, 22]);
-    const rep4Bottom = 3 * PUSHUP_REP_MS + PUSHUP_REP_MS / 2;
-    expect(readingAt('pushup', rep4Bottom).dist).toBeCloseTo(PUSHUP_SHALLOW_CM);
-  });
-
-  it('push-up: 10 reps = 8 full + 2 shallow minima', () => {
-    const w = waveform('pushup', 10 * PUSHUP_REP_MS);
-    const minima = Array.from({ length: 10 }, (_, i) =>
-      Math.min(...w.slice(i * 15, (i + 1) * 15).map((r) => r.dist)),
-    );
-    expect(minima.filter((d) => d <= PUSHUP_FULL_CM + 0.5)).toHaveLength(8);
-    expect(minima.filter((d) => Math.abs(d - PUSHUP_SHALLOW_CM) < 0.5)).toHaveLength(2);
-  });
-
-  it('squat: az peaks ~1.8 g once every 2 s, resting at 1 g', () => {
-    expect(readingAt('squat', 0).az).toBeCloseTo(1, 1);
-    expect(readingAt('squat', SQUAT_REP_MS / 2).az).toBeCloseTo(SQUAT_PEAK_G, 2);
-    const w = waveform('squat', 3 * SQUAT_REP_MS);
-    const peaks = w.filter((r, i) => r.az > 1.4 && (i === 0 || w[i - 1].az <= 1.4));
-    expect(peaks).toHaveLength(3);
+  it('squat: phone ay swings from −1 g to −0.2 g every 2 s; every 4th squat is half depth', () => {
+    expect([1, 2, 3, 4, 5, 8].map(squatDepth)).toEqual([0.8, 0.8, 0.8, 0.4, 0.8, 0.4]);
+    expect(readingAt('squat', 0)).toMatchObject({ source: 'phone', ay: SQUAT_REST_G });
+    expect(readingAt('squat', SQUAT_REP_MS / 2).ay).toBeCloseTo(SQUAT_REST_G + SQUAT_FULL_DEPTH_G);
+    expect(readingAt('squat', 3 * SQUAT_REP_MS + SQUAT_REP_MS / 2).ay).toBeCloseTo(SQUAT_REST_G + 0.4);
   });
 
   it('jail: 1 for 30 s then 0', () => {
@@ -67,7 +49,7 @@ describe('simulator waveforms', () => {
 
   it('idle: nothing moves', () => {
     const w = waveform('idle', 3_000);
-    expect(new Set(w.map((r) => `${r.dist},${r.az},${r.jail}`)).size).toBe(1);
+    expect(new Set(w.map((r) => JSON.stringify({ ...r, t: 0 }))).size).toBe(1);
   });
 
   it('parseMode accepts known modes and rejects others', () => {

@@ -1,5 +1,5 @@
 /** Test-only helpers for verifier tests (deterministic noise, waveform utilities). */
-import { SAMPLE_MS, readingAt } from '../../bridge/simulator';
+import { SAMPLE_MS, readingAt, type Mode } from '../../bridge/simulator';
 import type { Reading } from '../../lib/schemas';
 import type { Verifier, VerifierEvent } from './types';
 
@@ -14,11 +14,11 @@ export function seededRandom(seed: number): () => number {
   };
 }
 
-/** Appends `ms` of resting readings (timestamps continue) so the last rep can finish. */
-export function withRest(readings: readonly Reading[], ms = 500): Reading[] {
+/** Appends `ms` of `mode`'s resting reading (timestamps continue) so the last rep can finish. */
+export function withRest(readings: readonly Reading[], mode: Mode = 'idle', ms = 500): Reading[] {
   const lastT = readings.length > 0 ? readings[readings.length - 1].t : -SAMPLE_MS;
   const rest = Array.from({ length: ms / SAMPLE_MS }, (_, i) => ({
-    ...readingAt('idle', 0),
+    ...readingAt(mode, 0),
     t: lastT + (i + 1) * SAMPLE_MS,
   }));
   return [...readings, ...rest];

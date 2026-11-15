@@ -77,9 +77,10 @@ Post leaderboard + level-up clip to Discord at 2 PM.
 ---
 ## 3. Architecture
 ```
-System Core (Arduino + Grove) --USB serial JSON--> bridge (Python pyserial or Web Serial)
-        ▲ commands (LCD, servo lock, buzzer)            │
-        │                                               ▼
+Home Base (Arduino + Grove) --USB serial JSON--> bridge (Node serialport) --HTTP--> /api/readings
+        ▲ commands (4-digit display, servo lock, buzzer)                     ▲
+iPhone /hunter (armband, DeviceMotion) ------HTTPS------------------------------┘
+Apple Watch app --HTTPS /api/watch · Apple Health (Shortcuts) --HTTPS /api/health
 Glass web app (Next.js) <--SSE-- Backend (Next.js API / Node)
                                    ├─ Quest Engine (deterministic: quests, XP, ranks, penalties)
                                    ├─ Verifiers (code: rep counting, timers, sensor rules)
@@ -93,21 +94,24 @@ Maritime agent (cron): midnight quest drop + Penalty Zone check + nightly Gate s
 ```
 **NO Claude Fable model at runtime.**
 
-### Serial protocol
-Device → laptop every 100 ms (reps need speed):
-`{"t":ms,"dist":cm,"ax":g,"ay":g,"az":g,"jail":0|1,"touch":0|1,"light":0-1023,"snd":0-1023,"bottle":0|1,"btn":0|1}`
-Laptop → device: `LCD:<line1>|<line2>`, `COLOR:<blue|red|gold|green>`, `LOCK`, `UNLOCK`, `BUZZ:<alarm|chime|tick>`, `SEG:<4 chars>`.
+### Readings protocol (all sources → `POST /api/readings`, `ReadingSchema`)
+`{"t":ms,"source":"homebase"|"phone"|"watch","pad"?:0|1,"ax"?:g,"ay"?:g,"az"?:g,"jail"?:0|1,"btn"?:0|1,"light"?:0-1023,"snd"?:0-1023}`
+- Every sensor field is optional; unknown fields are stripped. `source` defaults to `homebase`.
+- Home Base (every 100 ms over serial): pad (push-up switch D3), jail (IR D6), btn (D2), snd (A0), light (A1), accel (I2C).
+- Phone / Watch: accelerationIncludingGravity in g (~30 Hz, batched).
+
+Laptop → Home Base (one per line, `DeviceCommandSchema`): `SEG:<4 chars>`, `LOCK`, `UNLOCK`, `BUZZ:<chime|alarm|tick>`. Servo lock D5, buzzer D4, 4-digit display I2C.
 
 ### SSE events (backend → web app)
 `reading`, `rep`, `rep.rejected` (half-rep → "REP NOT COUNTED"), `quest.update`, `quest.complete`, `levelup`, `penalty`, `voice`. Payloads: `StreamEventSchema` in `lib/schemas.ts`.
 
 ### Verifiers (code, not AI — must be reliable)
-- **Push-up:** distance state machine: UP (> baseline−5 cm) → DOWN (< threshold, e.g. ≤ 12 cm from chest calibration) → UP = 1 rep. Min 0.5 s per rep. Not deep enough → "REP NOT COUNTED".
-- **Squat / jumping jack:** accelerometer magnitude peaks with hysteresis + min interval.
-- **Phone Jail:** switch closed continuously for the quest duration; servo LOCK; removing early = quest failed.
-- **Meditation:** touch held + sound below quiet baseline for duration (short grace gaps).
+- **Push-up (pad):** Home Base pad 0→1→0 = rep (counted on release). 80 ms debounce, ≥ 0.6 s between reps ("too fast"), pad held > 3 s ignored (resting).
+- **Squat / jumping jack / sit-up / arm push-up (phone or Watch):** generic accel counter. First 2 slow reps calibrate the dominant axis and full depth (and count); then a rep = reach ≥ 70 % depth and return. ≥ 0.7 s per rep; partial motion → `rep.rejected` "not deep enough".
+- Router picks the verifier by quest type × reading source; reps from every source add to one progress count.
+- **Phone Jail:** IR sees the phone continuously for the quest duration; servo LOCK; removing early = quest failed.
+- **Meditation:** button held + sound below quiet baseline for duration (short grace gaps).
 - **Lights out:** light below dark threshold before deadline.
-- **Water:** coaster sensor lift→return cycles.
 - **Photo proof (chores/gates):** Gemini vision with a strict JSON rubric (`{passed, confidence, reason}`); confidence < 0.7 → "needs better proof".
 - **Boss Quiz:** Claude generates 3 questions from the topic the user entered; Haiku grades simple ones, Opus only for the weekly boss.
 

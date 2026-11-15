@@ -1,30 +1,35 @@
 /**
- * Sensor simulator — never blocked by hardware (BACKEND_STEPS Phase 3).
+ * Sensor simulator — never blocked by hardware.
  *
  *   npm run sim [pushup|squat|jail|idle]
  *
+ *   pushup  Home Base pad: chest presses the pad once per 1.5 s, with one-sample contact
+ *           bounce on every press and release (the verifier must debounce it).
+ *   squat   iPhone armband (source 'phone'): ay swings −1 g → −0.2 g once per 2 s;
+ *           every 4th squat only reaches half depth.
+ *   jail    Home Base IR: phone in the jail for 30 s, then removed.
+ *   idle    Home Base at rest.
+ *
  * POSTs one Reading every 100 ms to `${APP_URL}/api/readings`.
- * The waveform functions are pure and exported so verifier tests (Phase 4)
- * can replay exactly what the simulator sends.
+ * The waveform functions are pure and exported so verifier tests replay exactly what
+ * the simulator sends.
  */
-import { ReadingSchema, type Reading } from '../lib/schemas';
+import { ReadingSchema, type Bit, type Reading } from '../lib/schemas';
 
 export const MODES = ['pushup', 'squat', 'jail', 'idle'] as const;
 export type Mode = (typeof MODES)[number];
 
 export const SAMPLE_MS = 100;
 
-// Push-up: dist 40 → 10 → 40 cm, 1.5 s per rep; every 4th rep only reaches 22 cm.
+// Push-up pad: per 1.5 s rep (15 samples), pressed from 0.5 s to 1.3 s, bouncing once each edge.
 export const PUSHUP_REP_MS = 1_500;
-export const PUSHUP_TOP_CM = 40;
-export const PUSHUP_FULL_CM = 10;
-export const PUSHUP_SHALLOW_CM = 22;
-export const PUSHUP_SHALLOW_EVERY = 4;
+const PAD_PATTERN: readonly Bit[] = [0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 1, 0, 0];
 
-// Squat: az rests at 1 g and peaks ~1.8 g once every 2 s.
+// Squat (phone armband): ay rests at −1 g, reaches −0.2 g at the bottom of a full squat.
 export const SQUAT_REP_MS = 2_000;
-export const SQUAT_PEAK_G = 1.8;
-const SQUAT_PEAK_WIDTH_MS = 250; // gaussian σ of the peak
+export const SQUAT_REST_G = -1;
+export const SQUAT_FULL_DEPTH_G = 0.8;
+export const SQUAT_SHALLOW_EVERY = 4;
 
 // Phone Jail: jail=1 for 30 s, then 0.
 export const JAIL_DURATION_MS = 30_000;
@@ -32,51 +37,54 @@ export const JAIL_DURATION_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 1_000;
 const DEFAULT_APP_URL = 'http://localhost:3000';
 
-const BASE_READING: Reading = {
+const HOMEBASE_READING: Reading = {
   t: 0,
-  dist: PUSHUP_TOP_CM,
-  ax: 0,
-  ay: 0,
-  az: 1,
+  source: 'homebase',
+  pad: 0,
   jail: 0,
-  touch: 0,
+  btn: 0,
   light: 500,
   snd: 100,
-  bottle: 0,
-  btn: 0,
 };
 
 const round = (n: number, dp = 2): number => Math.round(n * 10 ** dp) / 10 ** dp;
 
-/** Bottom distance (cm) of push-up rep `repNumber` (1-based). */
-export function pushupBottom(repNumber: number): number {
-  return repNumber % PUSHUP_SHALLOW_EVERY === 0 ? PUSHUP_SHALLOW_CM : PUSHUP_FULL_CM;
+function padAt(tMs: number): Bit {
+  const index = Math.floor((tMs % PUSHUP_REP_MS) / SAMPLE_MS);
+  return PAD_PATTERN[index] ?? 0;
 }
 
-function pushupDist(tMs: number): number {
-  const repNumber = Math.floor(tMs / PUSHUP_REP_MS) + 1;
-  const phase = (tMs % PUSHUP_REP_MS) / PUSHUP_REP_MS; // 0 top → 0.5 bottom → 1 top
-  const depth = PUSHUP_TOP_CM - pushupBottom(repNumber);
-  return round(PUSHUP_TOP_CM - (depth * (1 - Math.cos(2 * Math.PI * phase))) / 2);
+/** Depth (g) of squat `repNumber` (1-based): every 4th is half depth. */
+export function squatDepth(repNumber: number): number {
+  const full = SQUAT_FULL_DEPTH_G;
+  return repNumber % SQUAT_SHALLOW_EVERY === 0 ? full / 2 : full;
 }
 
-function squatAz(tMs: number): number {
-  const offset = (tMs % SQUAT_REP_MS) - SQUAT_REP_MS / 2; // peak mid-cycle
-  return round(1 + (SQUAT_PEAK_G - 1) * Math.exp(-((offset / SQUAT_PEAK_WIDTH_MS) ** 2)));
+function squatReading(tMs: number): Reading {
+  const repNumber = Math.floor(tMs / SQUAT_REP_MS) + 1;
+  const phase = (tMs % SQUAT_REP_MS) / SQUAT_REP_MS; // 0 standing → 0.5 bottom → 1 standing
+  const offset = (squatDepth(repNumber) * (1 - Math.cos(2 * Math.PI * phase))) / 2;
+  const ay = SQUAT_REST_G + offset;
+  return {
+    t: tMs,
+    source: 'phone',
+    ax: round(0.05 * Math.sin(tMs / 300)), // small sway
+    ay: round(ay),
+    az: round(Math.sqrt(Math.max(0, 1 - ay * ay))), // gravity moves onto z as the arm tilts
+  };
 }
 
 /** The reading the simulator sends at `tMs` ms after start. */
 export function readingAt(mode: Mode, tMs: number): Reading {
-  const base = { ...BASE_READING, t: tMs };
   switch (mode) {
     case 'pushup':
-      return { ...base, dist: pushupDist(tMs) };
+      return { ...HOMEBASE_READING, t: tMs, pad: padAt(tMs) };
     case 'squat':
-      return { ...base, az: squatAz(tMs) };
+      return squatReading(tMs);
     case 'jail':
-      return { ...base, jail: tMs < JAIL_DURATION_MS ? 1 : 0 };
+      return { ...HOMEBASE_READING, t: tMs, jail: tMs < JAIL_DURATION_MS ? 1 : 0 };
     case 'idle':
-      return base;
+      return { ...HOMEBASE_READING, t: tMs };
   }
 }
 
@@ -97,13 +105,13 @@ function eventBetween(mode: Mode, prevT: number, t: number): string | null {
   if (mode === 'pushup') {
     const done = Math.floor(t / PUSHUP_REP_MS);
     if (done === Math.floor(prevT / PUSHUP_REP_MS)) return null;
-    const bottom = pushupBottom(done);
-    return `rep #${done} sent — ${bottom === PUSHUP_SHALLOW_CM ? 'SHALLOW' : 'full'} (${bottom} cm)`;
+    return `pad rep #${done} sent (with contact bounce)`;
   }
   if (mode === 'squat') {
     const done = Math.floor(t / SQUAT_REP_MS);
     if (done === Math.floor(prevT / SQUAT_REP_MS)) return null;
-    return `squat #${done} sent — peak ${SQUAT_PEAK_G} g`;
+    const shallow = squatDepth(done) < SQUAT_FULL_DEPTH_G;
+    return `phone squat #${done} sent — ${shallow ? 'SHALLOW' : 'full'}${done <= 2 ? ' (calibration)' : ''}`;
   }
   if (mode === 'jail' && prevT < JAIL_DURATION_MS && t >= JAIL_DURATION_MS) {
     return `phone removed (jail=0) after ${JAIL_DURATION_MS / 1000} s`;

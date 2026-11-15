@@ -8,8 +8,7 @@ import type { StreamEvent } from '../../../lib/schemas';
 import { POST, resetReadingThrottle } from './route';
 
 const reading = {
-  t: 1, dist: 40, ax: 0, ay: 0, az: 1,
-  jail: 0, touch: 0, light: 500, snd: 100, bottle: 0, btn: 0,
+  t: 1, source: 'homebase', pad: 0, jail: 0, btn: 0, light: 500, snd: 100,
 };
 
 function post(body: unknown, raw = false): Request {
@@ -79,6 +78,27 @@ describe('POST /api/readings', () => {
     expect(body.success).toBe(false);
     expect(body.error).toMatch(/jail/);
     expect(routeReading).not.toHaveBeenCalled();
+  });
+
+  it('defaults source to homebase (raw firmware JSON) and strips unknown fields', async () => {
+    const res = await POST(post({ t: 5, pad: 1, dist: 40, touch: 1 }));
+
+    expect(res.status).toBe(200);
+    expect(routeReading).toHaveBeenCalledWith({ t: 5, source: 'homebase', pad: 1 });
+  });
+
+  it('accepts phone accel readings', async () => {
+    const phone = { t: 5, source: 'phone', ax: 0.1, ay: -0.9, az: 0.2 };
+
+    const res = await POST(post(phone));
+
+    expect(res.status).toBe(200);
+    expect(routeReading).toHaveBeenCalledWith(phone);
+  });
+
+  it('rejects an unknown source', async () => {
+    const res = await POST(post({ t: 5, source: 'toaster' }));
+    expect(res.status).toBe(400);
   });
 
   it('rejects malformed JSON with 400', async () => {
