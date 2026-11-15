@@ -1,6 +1,7 @@
 /**
  * GET /api/stream — Server-Sent Events. Each bus event is written as
- * `data: <StreamEvent JSON + irisMood>\n\n`; a comment heartbeat keeps proxies from idling out.
+ * `id: <n>\ndata: <StreamEvent JSON + irisMood>\n\n`; a 2 KB first comment flushes buffering proxies and a
+ * comment heartbeat every 10 s keeps them from idling out. Fallback for buffered networks: GET /api/events.
  *
  * Note: next.config has `cacheComponents: true`, which forbids `export const runtime`
  * and replaces `dynamic = 'force-dynamic'` — `await connection()` keeps this at request time.
@@ -10,7 +11,9 @@ import { startVoice } from '../../../engine/agents/voice';
 import { subscribe } from '../../../lib/bus';
 import { withMood } from '../../../lib/irisMood';
 
-const HEARTBEAT_MS = 15_000;
+export const HEARTBEAT_MS = 10_000;
+/** Some proxies hold the first few KB of a response; a 2 KB comment pushes the stream through at once. */
+const FLUSH_PADDING = `: ${' '.repeat(2048)}\n\n`;
 
 export async function GET(request: Request): Promise<Response> {
   await connection();
@@ -32,7 +35,8 @@ export async function GET(request: Request): Promise<Response> {
         }
       };
 
-      const unsubscribe = subscribe((event) => write(`data: ${JSON.stringify(withMood(event))}\n\n`));
+      // `id:` lets EventSource resume (Last-Event-ID) and matches GET /api/events?since=<id>.
+      const unsubscribe = subscribe((event, id) => write(`id: ${id}\ndata: ${JSON.stringify(withMood(event))}\n\n`));
       const heartbeat = setInterval(() => write(': ping\n\n'), HEARTBEAT_MS);
 
       cleanup = () => {
@@ -49,6 +53,7 @@ export async function GET(request: Request): Promise<Response> {
       };
 
       request.signal.addEventListener('abort', cleanup);
+      write(FLUSH_PADDING);
       write(': connected\n\n');
     },
     cancel() {

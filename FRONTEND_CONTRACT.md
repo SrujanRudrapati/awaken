@@ -293,8 +293,27 @@ stream.onmessage = (e) => {
   switch (event.type) { /* … */ }
 };
 ```
-Comment lines (`: ping` every 15 s) keep the connection alive; `EventSource` reconnects by itself. Filter by `playerId`
+Comment lines (`: ping` every 10 s, plus a 2 KB comment on connect to flush proxies) keep the connection alive;
+`EventSource` reconnects by itself. Each frame has an `id: <n>` line (`e.lastEventId`). Filter by `playerId`
 (the stream carries everyone's events; `reading` has no playerId — it is the Home Base).
+
+### 4.1 Polling fallback — use it on every screen
+
+Some networks (the cloudflared quick tunnel used for phones) buffer SSE, so the stream can go silent.
+**If no SSE message arrives for 5 s, poll `GET /api/events?since=<lastId>` every 1 s** until SSE talks again.
+De-duplicate by id: skip any event whose id ≤ the last one you handled (from either path).
+
+```
+GET /api/events?since=41
+→ { "success": true, "data": { "lastId": 43, "events": [
+     { "id": 42, "type": "rep", "playerId": "p1", "questId": "q1", "count": 3, "irisMood": "watching" },
+     { "id": 43, "type": "quest.update", "quest": { … }, "irisMood": "watching" } ] }, "error": null }
+```
+- Same event JSON as the stream, plus `id`. Raw `reading` events are **not** included; the newest 500 events are kept.
+- First poll with no known id: just store `lastId` (don't replay history; load current state over REST).
+- If `lastId` comes back **lower** than yours, the server restarted: store the new `lastId`, refetch REST state.
+- `since` must be a non-negative integer (else 400).
+- Reference implementation: `app/hunter/useSystemStream.ts` + `app/hunter/eventPolling.ts` (copy them).
 
 **Every event includes `irisMood`**: `watching` · `unimpressed` · `proud` · `furious` · `sleepy` → Iris's face/colour.
 
