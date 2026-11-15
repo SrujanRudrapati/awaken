@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../engine/quests', () => ({}));
 vi.mock('../../../engine/router', () => ({ routeReading: vi.fn() }));
@@ -12,10 +12,10 @@ const reading = {
   t: 1, source: 'homebase', pad: 0, jail: 0, btn: 0, light: 500, snd: 100,
 };
 
-function post(body: unknown, raw = false, query = ''): Request {
-  return new Request(`http://localhost/api/readings${query}`, {
+function post(body: unknown, raw = false, query = '', headers: Record<string, string> = {}, origin = 'http://localhost'): Request {
+  return new Request(`${origin}/api/readings${query}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: raw ? (body as string) : JSON.stringify(body),
   });
 }
@@ -53,6 +53,34 @@ describe('POST /api/readings', () => {
 
     expect(res.status).toBe(200);
     expect(routeReading).toHaveBeenCalledWith(phone, 'ab12cd34');
+  });
+
+  describe('lock-down (public tunnel)', () => {
+    const tunnel = 'https://abc.trycloudflare.com';
+    const viaTunnel = { 'cf-connecting-ip': '203.0.113.9' };
+    const phone = { t: 1, source: 'phone', ax: 0, ay: -1, az: 0 };
+    afterEach(() => {
+      delete process.env.SYNC_TOKEN;
+    });
+
+    it('refuses Home Base readings from the tunnel without SYNC_TOKEN (no forged pad reps)', async () => {
+      process.env.SYNC_TOKEN = 'tok';
+      expect((await POST(post({ t: 1, source: 'homebase', pad: 1 }, false, '', viaTunnel, tunnel))).status).toBe(401);
+      expect(routeReading).not.toHaveBeenCalled();
+    });
+
+    it('accepts them with X-Sync-Token, or from localhost', async () => {
+      process.env.SYNC_TOKEN = 'tok';
+      expect((await POST(post(reading, false, '', { ...viaTunnel, 'x-sync-token': 'tok' }, tunnel))).status).toBe(200);
+      expect((await POST(post(reading))).status).toBe(200);
+    });
+
+    it('lets the phone page send its own session-tagged readings through the tunnel (no secret in the browser)', async () => {
+      process.env.SYNC_TOKEN = 'tok';
+      expect((await POST(post([phone], false, '?sessionId=ab12cd34', viaTunnel, tunnel))).status).toBe(200);
+      expect((await POST(post([phone], false, '', viaTunnel, tunnel))).status).toBe(401);
+      expect((await POST(post([phone, reading], false, '?sessionId=ab12cd34', viaTunnel, tunnel))).status).toBe(401);
+    });
   });
 
   it('rejects a malformed sessionId', async () => {

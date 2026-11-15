@@ -3,7 +3,7 @@
  * configured the route refuses everyone (a missing env var must never open a route).
  *
  *   CRON_SECRET → `Authorization: Bearer <secret>`      (/api/cron/daily, /api/demo/reset)
- *   SYNC_TOKEN  → `X-Sync-Token: <token>` or Bearer     (/api/health, /api/watch)
+ *   SYNC_TOKEN  → `X-Sync-Token: <token>` or Bearer     (/api/health, /api/watch, Home Base /api/readings)
  */
 import { timingSafeEqual } from 'node:crypto';
 import { fail } from '../../../lib/api-response';
@@ -33,6 +33,27 @@ function secretFromEnv(name: 'CRON_SECRET' | 'SYNC_TOKEN'): string | null {
 export function requireCronSecret(request: Request): Response | null {
   const secret = secretFromEnv('CRON_SECRET');
   return secret && safeEqual(bearer(request), secret) ? null : fail(401, 'Unauthorized');
+}
+
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1', '::ffff:127.0.0.1']);
+/** Headers a tunnel or proxy adds for a remote client (cloudflared sets cf-connecting-ip). */
+const REMOTE_CLIENT_HEADERS = ['cf-connecting-ip', 'x-real-ip', 'true-client-ip'];
+
+/**
+ * True for a request made on this machine (e.g. the bridge or simulator → http://localhost:3000): loopback Host,
+ * no tunnel client header, and only loopback addresses in x-forwarded-for. Tunnel traffic also reaches the server
+ * from localhost, but carries the public Host and cf-connecting-ip, so it is never treated as local.
+ */
+export function isLocalRequest(request: Request): boolean {
+  if (!LOOPBACK.has(new URL(request.url).hostname)) return false;
+  if (REMOTE_CLIENT_HEADERS.some((h) => request.headers.has(h))) return false;
+  const forwarded = request.headers.get('x-forwarded-for');
+  return !forwarded || forwarded.split(',').every((ip) => LOOPBACK.has(ip.trim()));
+}
+
+/** True when the request carries the right SYNC_TOKEN (fail closed when unset). */
+export function hasSyncToken(request: Request): boolean {
+  return requireSyncToken(request) === null;
 }
 
 /** Null when authorized, otherwise a ready 401. Accepts X-Sync-Token (Shortcuts, Watch) or a Bearer token. */

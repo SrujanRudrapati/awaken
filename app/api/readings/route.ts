@@ -1,6 +1,8 @@
 /**
  * POST /api/readings[?sessionId=<id>] — bridge/simulator/phone sends one Reading or a batch.
  * Phone/Watch readings count only with the sessionId their vow start returned; Home Base readings need none.
+ * Auth: SYNC_TOKEN (X-Sync-Token / Bearer) or a request from this machine (bridge, simulator). The one exception is
+ * a phone/Watch-only batch with a sessionId (the /hunter page can't hold a secret): it can only count toward that vow.
  * Every reading goes to the engine; `reading` SSE events are throttled to 10/s
  * so the UI isn't flooded.
  */
@@ -10,7 +12,8 @@ import { routeReading } from '../../../engine/router';
 import { recordLight } from '../../../lib/homebaseLight';
 import { fail, ok } from '../../../lib/api-response';
 import { publish } from '../../../lib/bus';
-import { ReadingSchema, SessionIdSchema } from '../../../lib/schemas';
+import { ReadingSchema, SessionIdSchema, type Reading } from '../../../lib/schemas';
+import { hasSyncToken, isLocalRequest } from '../_lib/auth';
 
 const MAX_BATCH = 50;
 const PUBLISH_INTERVAL_MS = 100; // 10 events/s
@@ -29,6 +32,11 @@ function shouldPublish(now: number): boolean {
   if (last !== undefined && now - last < PUBLISH_INTERVAL_MS) return false;
   throttle.__awakenLastReadingPublish = now;
   return true;
+}
+
+function isAllowed(request: Request, readings: readonly Reading[], sessionId: string | undefined): boolean {
+  if (isLocalRequest(request) || hasSyncToken(request)) return true;
+  return sessionId !== undefined && readings.every((r) => r.source !== 'homebase');
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -51,6 +59,9 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const readings = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
+  if (!isAllowed(request, readings, sessionId)) {
+    return fail(401, 'Home Base readings need X-Sync-Token (or must come from this machine); phone/Watch readings need ?sessionId=');
+  }
 
   for (const reading of readings) {
     recordLight(reading); // dark-room minutes confirm Watch "lights out" vows

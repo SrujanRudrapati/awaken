@@ -146,7 +146,7 @@ function loadEnv(): void {
 async function send(url: string, reading: Reading): Promise<void> {
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(process.env.SYNC_TOKEN ? { 'x-sync-token': process.env.SYNC_TOKEN } : {}) },
     body: JSON.stringify(ReadingSchema.parse(reading)),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });

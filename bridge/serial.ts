@@ -116,12 +116,18 @@ export class ReadingBatcher {
   }
 }
 
+/** Auth for POST /api/readings: SYNC_TOKEN from .env.local (also lets the bridge run on another machine). */
+export function syncHeaders(): Record<string, string> {
+  const token = process.env.SYNC_TOKEN;
+  return token ? { 'x-sync-token': token } : {};
+}
+
 export function httpPoster(appUrl: string): PostBatch {
   const url = `${appUrl}/api/readings`;
   return async (batch) => {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...syncHeaders() },
       body: JSON.stringify(batch),
       signal: AbortSignal.timeout(POST_TIMEOUT_MS),
     });
@@ -130,6 +136,19 @@ export function httpPoster(appUrl: string): PostBatch {
 }
 
 // ── Commands (HTTP :3001 → serial) ──────────────────────────────────────────
+
+/** Loopback only: no one else on the hotspot can LOCK the jail or sound the alarm. */
+export const COMMAND_HOST = '127.0.0.1';
+
+export function listenCommands(server: Server, port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, COMMAND_HOST, () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+}
 
 const CommandBodySchema = z.object({ cmd: DeviceCommandSchema });
 
@@ -347,7 +366,9 @@ function main(): void {
   setInterval(() => void batcher.flush(), FLUSH_MS);
 
   const server = createCommandServer(link);
-  server.listen(CMD_PORT, () => log(`commands on http://localhost:${CMD_PORT}/cmd → ${path}; readings → ${appUrl}`));
+  listenCommands(server, CMD_PORT)
+    .then(() => log(`commands on http://${COMMAND_HOST}:${CMD_PORT}/cmd → ${path}; readings → ${appUrl}`))
+    .catch((error: unknown) => log(`command server failed: ${errorText(error)}`));
 
   const shutdown = (): void => {
     link.close();

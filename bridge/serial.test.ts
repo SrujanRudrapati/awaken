@@ -191,3 +191,31 @@ describe('Home Base firmware lines', () => {
     expect(configCommands({ HOMEBASE_IR: '1', HOMEBASE_SERVO: 'true' })).toEqual(['CFG:IR:1', 'CFG:SERVO:1']);
   });
 });
+
+describe('lock-down', () => {
+  afterEach(() => {
+    delete process.env.SYNC_TOKEN;
+    vi.unstubAllGlobals();
+  });
+
+  it('the :3001 command server listens on 127.0.0.1 only', async () => {
+    const { listenCommands } = await import('./serial');
+    const server = createCommandServer({ write: vi.fn() } as unknown as CommandTarget);
+
+    await listenCommands(server, 0);
+
+    expect((server.address() as AddressInfo).address).toBe('127.0.0.1');
+    server.close();
+  });
+
+  it('readings are posted with X-Sync-Token when SYNC_TOKEN is set', async () => {
+    const { httpPoster } = await import('./serial');
+    process.env.SYNC_TOKEN = 'tok';
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await httpPoster('http://localhost:3000')([reading(1)]);
+
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ 'x-sync-token': 'tok' });
+  });
+});

@@ -283,7 +283,7 @@ Shards are **earn-only** (1 per 10 Proof kept, +20 per Ascension). No purchase U
 
 | Route | Caller | Auth |
 |---|---|---|
-| `POST /api/readings[?sessionId=]` | Home Base bridge, `/hunter` phone page (`sessionId` required for phone/Watch to count) | none (LAN/tunnel) |
+| `POST /api/readings[?sessionId=]` | Home Base bridge, `/hunter` phone page (`sessionId` required for phone/Watch to count) | `X-Sync-Token` or same machine; a phone/Watch-only batch with `?sessionId=` needs neither (401 otherwise) |
 | `POST /api/watch` `{ playerId, event: "rep"\|"quest.complete", exercise, count }` | Apple Watch app | `X-Sync-Token` |
 | `POST /api/health` (totals or sleep) | iPhone Shortcut (§6) | `X-Sync-Token` |
 | `POST /api/cron/daily` | midnight cron | Bearer CRON_SECRET |
