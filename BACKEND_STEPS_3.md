@@ -70,7 +70,8 @@ Model: Opus 5.5 by default. Fable 5.2 only where marked 🧠.
 - [x] 💬 *"lib/memory.ts remember/recall with containerTag player_<id>; save goals + per-quest summaries; feed into designer + voice."* ✅ commit
 
 ### 🎯 3:00 AM — FEATURE FREEZE
-- [ ] 🧠 (Fable) *"Review the whole backend vs SPEC.md: bugs, race conditions, demo risks. List only."* → fix top 5.
+- [x] 🧠 (Fable) *"Review the whole backend vs SPEC.md: bugs, race conditions, demo risks. List only."* → fix top 5.
+  - Fixed: urgent-vow countdown vs slow DB, slow lookup overwriting a stored player, Watch double-count on re-open, /api/player 503 offline, quiz/trial/mind double-start. Still open: SSE over quick tunnel (test on phone), phone/watch readings carry no playerId, no Maritime caller for /api/cron/daily, demo:reset leftovers, jail clock regression, gate photo check-in.
 
 ## APPLE WATCH APP (parallel, teammate, as soon as Xcode finishes)
 1. Xcode → Settings → Accounts → add Apple ID. iPhone: Settings → Privacy & Security → Developer Mode ON. Watch: same.

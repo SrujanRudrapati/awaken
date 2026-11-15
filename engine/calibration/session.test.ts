@@ -23,6 +23,7 @@ vi.mock('../../lib/llm', () => {
 
 import { subscribe } from '../../lib/bus';
 import * as db from '../../lib/db';
+import { geminiJson } from '../../lib/llm';
 import type { Reading, StreamEvent } from '../../lib/schemas';
 import { createPlayer, getPlayer, getQuest, resetEngine } from '../quests';
 import { resetRouter, routeReading } from '../router';
@@ -117,6 +118,22 @@ describe('Calibration session', () => {
     expect(player?.xp).toBe(228 + RECALIBRATION_BONUS); // D seed = 4 × 57 Proof
     expect(player?.rank).toBe('D');
     expect(events.filter((e) => e.type === 'calibration.complete').at(-1)).toMatchObject({ recalibration: true, bonusXp: RECALIBRATION_BONUS });
+  });
+
+  it('two overlapping mind begins share one quiz, so the shown question is the one graded', async () => {
+    await startCalibration('p1');
+    const pool = (label: string) =>
+      [1, 2, 3].flatMap((level) => [1, 2, 3, 4].map((n) => ({ question: `${label} ${level}.${n}?`, options: ['right', 'b', 'c', 'd'], answerIndex: 0, level })));
+    vi.mocked(geminiJson).mockResolvedValueOnce({ questions: pool('First') }).mockResolvedValueOnce({ questions: pool('Second') });
+
+    const [a, b] = await Promise.all([
+      submitCalibration('p1', { stage: 'mind', action: 'begin' }),
+      submitCalibration('p1', { stage: 'mind', action: 'begin' }),
+    ]);
+
+    expect(b.stage).toEqual(a.stage);
+    const question = (a.stage as { question: { id: string } }).question;
+    await expect(submitCalibration('p1', { stage: 'mind', action: 'answer', questionId: question.id, answerIndex: 0 })).resolves.toBeDefined();
   });
 
   it('guards: unknown person, no session, wrong question', async () => {

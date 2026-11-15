@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../lib/db', () => ({
   getPlayer: vi.fn().mockResolvedValue(null),
   upsertPlayer: vi.fn().mockResolvedValue(undefined),
+  insertPlayerIfAbsent: vi.fn().mockResolvedValue(true),
   listPlayers: vi.fn().mockResolvedValue([]),
   logEvent: vi.fn(),
+  latestCalibration: vi.fn().mockResolvedValue(null),
+  getWallet: vi.fn().mockResolvedValue(null),
 }));
 vi.mock('../lib/notify', () => ({ notify: vi.fn() }));
 vi.mock('../lib/device', () => ({
@@ -65,8 +68,23 @@ describe('quest engine', () => {
 
     expect(player).toMatchObject({ id: 'p1', rank: 'E', level: 1, xp: 0, penalty: false });
     expect(Object.values(player.stats).every((v) => v === 0)).toBe(true);
-    expect(db.upsertPlayer).toHaveBeenCalledWith(player);
+    expect(db.insertPlayerIfAbsent).toHaveBeenCalledWith(player);
+    expect(db.upsertPlayer).not.toHaveBeenCalled();
     expect(await createPlayer({ name: 'Other', id: 'p1' })).toBe(player); // idempotent
+  });
+
+  it('never overwrites a stored player when the lookup was too slow, and restores them', async () => {
+    const stored = {
+      id: 'old', name: 'Old', rank: 'D' as const, level: 4, xp: 160, penalty: false,
+      stats: { STR: 3, INT: 0, FOCUS: 0, VIT: 0, DISCIPLINE: 0, CHA: 0 },
+    };
+    vi.mocked(db.getPlayer).mockReturnValueOnce(new Promise(() => {})).mockResolvedValueOnce(stored);
+    vi.mocked(db.insertPlayerIfAbsent).mockResolvedValueOnce(false);
+
+    await createPlayer({ name: 'Old', id: 'old' });
+
+    expect(db.upsertPlayer).not.toHaveBeenCalled();
+    await vi.waitFor(async () => expect((await getPlayer('old'))?.xp).toBe(160));
   });
 
   it('loads unknown players from Tiger Data', async () => {
@@ -342,6 +360,19 @@ describe('quest engine', () => {
       expect(ofType('penalty')).toHaveLength(0);
       expect(vi.mocked(send).mock.calls.filter(([c]) => /SEG: +\d+$/.test(c))).toEqual([]);
     });
+    it('a vow finished just before the deadline is kept even when Tiger hangs', async () => {
+      vi.mocked(db.latestCalibration).mockReturnValue(new Promise(() => {}));
+      await createPlayer({ name: 'Jin', id: 'p1' });
+      const quest = await emergencyQuest('p1');
+      await vi.advanceTimersByTimeAsync((EMERGENCY_SECONDS - 0.5) * 1_000);
+
+      pushups(10).forEach(routeReading);
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(getQuest(quest.id)?.status).toBe('done');
+      expect(ofType('penalty')).toHaveLength(0);
+    });
+
     it('a second emergency while one is running returns the running one', async () => {
       await createPlayer({ name: 'Jin', id: 'p1' });
       const first = await emergencyQuest('p1');

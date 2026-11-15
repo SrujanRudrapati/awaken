@@ -12,9 +12,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const id = IdSchema.safeParse((await params).id);
   if (!id.success) return fail(400, 'Invalid id');
   try {
-    const [player, history] = await Promise.all([getPlayer(id.data), statHistory(id.data)]);
+    const history = statHistory(id.data).catch((error: unknown) => {
+      console.error('[player] history unavailable', error instanceof Error ? error.message : error);
+      return []; // Wi-Fi off: the engine still has the player; the chart can wait
+    });
+    const [player, days] = await Promise.all([getPlayer(id.data), history]);
     if (!player) return fail(404, `No one found with id ${id.data}`);
-    return ok({ player, history });
+    return ok({ player, history: days });
   } catch (error) {
     console.error('[player] query failed', error);
     return fail(503, 'Profile data unavailable');

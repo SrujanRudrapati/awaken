@@ -79,9 +79,12 @@ function requireQuizQuest(playerId: string, questId: string): void {
 /** Creates (or returns the already-issued) questions for an active quiz quest. */
 export async function startQuiz(playerId: string, questId: string, topic = 'general knowledge'): Promise<PublicQuestion[]> {
   requireQuizQuest(playerId, questId);
-  const existing = state().quizzes.get(questId);
-  const questions = existing ?? (await generate(topic));
-  if (!existing) state().quizzes.set(questId, questions);
+  if (!state().quizzes.has(questId)) {
+    const generated = await generate(topic);
+    // An overlapping start may have stored a set while we waited: first one wins, so the screen and the grader agree.
+    if (!state().quizzes.has(questId)) state().quizzes.set(questId, generated);
+  }
+  const questions = state().quizzes.get(questId) ?? [];
   return questions.map(({ question, options }) => ({ question, options }));
 }
 

@@ -122,6 +122,13 @@ export function setActiveQuest(quest: Quest): void {
     throw new Error(`Quest ${quest.id} must be active to start (status: ${quest.status})`);
   }
   const state = getState();
+  const existing = state.active.get(quest.playerId);
+  if (existing?.quest.id === quest.id) {
+    // Same vow re-opened (page reload, second tap): keep its counters, calibration, Watch total and jail lock.
+    if (state.currentPlayerId !== quest.playerId) releaseJail(state, state.currentPlayerId);
+    state.currentPlayerId = quest.playerId;
+    return;
+  }
   releaseJail(state, state.currentPlayerId); // the old focus stops getting readings: never leave a phone locked
   releaseJail(state, quest.playerId);
   state.active.set(quest.playerId, {

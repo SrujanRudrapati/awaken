@@ -36,6 +36,18 @@ describe('focus quiz', () => {
     questId = (await startQuest('p1', { type: 'quiz' })).id;
   });
 
+  it('two overlapping starts get the same questions, and grading uses the ones shown', async () => {
+    const other = { questions: generated.questions.map((q) => ({ ...q, question: `Other: ${q.question}`, answerIndex: 3 })) };
+    vi.mocked(claudeJson).mockResolvedValueOnce(generated).mockResolvedValueOnce(other);
+
+    const [first, second] = await Promise.all([startQuiz('p1', questId), startQuiz('p1', questId)]);
+
+    expect(second).toEqual(first);
+    const result = await answerQuiz('p1', questId, [1, 0, 2]);
+    expect(result.correct).toBe(3);
+    expect(result.passed).toBe(true);
+  });
+
   it('never sends answers to the client', async () => {
     vi.mocked(claudeJson).mockResolvedValue(generated);
 

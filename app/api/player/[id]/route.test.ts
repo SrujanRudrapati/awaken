@@ -26,6 +26,16 @@ describe('GET /api/player/:id', () => {
     expect(body.data).toEqual({ player, history: [{ day: '2026-11-14', stat: 'STR', xp: 30 }] });
   });
 
+  it('still returns the player (empty history) when Tiger is unreachable', async () => {
+    vi.mocked(getPlayer).mockResolvedValue(player);
+    vi.mocked(statHistory).mockRejectedValue(new Error('connect ETIMEDOUT'));
+
+    const response = await call('p1');
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toEqual({ player, history: [] });
+  });
+
   it('404s for an unknown player', async () => {
     vi.mocked(getPlayer).mockResolvedValue(null);
     vi.mocked(statHistory).mockResolvedValue([]);

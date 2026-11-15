@@ -230,6 +230,16 @@ describe('router', () => {
       expect(applyWatchReps('p2', 'pushup', 1)).toMatchObject({ ok: false });
     });
 
+    it('re-activating the same vow keeps the Watch count, so cumulative reports are not re-added', () => {
+      setActiveQuest(quest({ type: 'squat', target: 30 }));
+      applyWatchReps('p1', 'squat', 7);
+
+      setActiveQuest(quest({ type: 'squat', target: 30, progress: 7 })); // UI reopens the vow
+      const result = applyWatchReps('p1', 'squat', 8);
+
+      expect(result).toMatchObject({ ok: true, applied: 1, progress: 8 });
+    });
+
     it('punch quests are counted by the Watch only', () => {
       expect(hasSensorVerifier('punch')).toBe(true);
     });

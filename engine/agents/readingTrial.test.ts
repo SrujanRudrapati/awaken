@@ -39,6 +39,16 @@ describe('read vow: Phone Jail time + timed trial', () => {
     await createPlayer({ name: 'Jin', id: 'p1' });
   });
 
+  it('two overlapping trial starts get the same questions', async () => {
+    const quest = await readFor(3);
+    const other = { questions: trial.questions.map((q) => ({ ...q, question: `Other: ${q.question}` })) };
+    vi.mocked(geminiJson).mockResolvedValueOnce(trial).mockResolvedValueOnce(other);
+
+    const [first, second] = await Promise.all([startReadingTrial('p1', quest.id), startReadingTrial('p1', quest.id)]);
+
+    expect(second.questions).toEqual(first.questions);
+  });
+
   it('reading time alone pays nothing; 2/3 on the trial verifies the vow', async () => {
     const quest = await readFor(3);
     expect(getQuest(quest.id)).toMatchObject({ status: 'active', title: 'Read: The Hobbit, chapter 5 · 1 min', topic: 'The Hobbit, chapter 5' });

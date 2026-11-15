@@ -28,6 +28,7 @@ import {
   statHistory,
   updatePlayer,
   upsertPlayer,
+  insertPlayerIfAbsent,
   type PlayerPatch,
 } from './db';
 
@@ -88,6 +89,14 @@ describe('db', () => {
     const [sql, params] = queryMock.mock.calls[0];
     expect(sql).toMatch(/ON CONFLICT \(id\) DO UPDATE/);
     expect(params).toEqual(['p1', 'Jin', 'E', 2, 60, JSON.stringify(player.stats), false, JSON.stringify({ STR: 0, INT: 0, FOCUS: 0, VIT: 0, DISCIPLINE: 0, CHA: 0 })]);
+  });
+
+  it('insertPlayerIfAbsent never overwrites an existing row', async () => {
+    queryMock.mockResolvedValueOnce({ rows: [{ id: 'p1' }] }).mockResolvedValueOnce({ rows: [] });
+
+    expect(await insertPlayerIfAbsent(player)).toBe(true);
+    expect(await insertPlayerIfAbsent(player)).toBe(false);
+    expect(queryMock.mock.calls[0][0]).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
   });
 
   it('getPlayer fills missing stats with 0', async () => {

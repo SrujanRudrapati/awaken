@@ -137,6 +137,26 @@ export async function upsertPlayer(player: Player): Promise<void> {
   );
 }
 
+/**
+ * Creates the row only if the id is new: true = inserted, false = already stored (left untouched),
+ * null = no database. Used for new players so a slow lookup can never reset a returning one.
+ */
+export async function insertPlayerIfAbsent(player: Player): Promise<boolean | null> {
+  const rows = await query<{ id: string }>(
+    `INSERT INTO players (id, name, rank, level, xp, stats, penalty, proof)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (id) DO NOTHING
+     RETURNING id`,
+    [player.id, player.name, player.rank, player.level, player.xp, JSON.stringify(player.stats), player.penalty, JSON.stringify(player.proof ?? emptyStats())],
+  );
+  return rows ? rows.length > 0 : null;
+}
+
+/** Opens a pooled connection at server start, so the first request isn't paying for the TLS handshake. */
+export async function warmUp(): Promise<void> {
+  await query('SELECT 1');
+}
+
 export async function getPlayer(id: string): Promise<Player | null> {
   const rows = await query<PlayerRow>(
     'SELECT id, name, rank, level, xp, stats, penalty, proof FROM players WHERE id = $1',

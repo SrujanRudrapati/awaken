@@ -148,7 +148,25 @@ export async function createPlayer(input: { name: string; id?: string }): Promis
     if (existing) return existing;
   }
   const id = input.id ?? randomUUID();
-  return savePlayer({ id, name: input.name, rank: 'E', level: 1, xp: 0, stats: zeroStats(), penalty: false });
+  const fresh: Player = { id, name: input.name, rank: 'E', level: 1, xp: 0, stats: zeroStats(), penalty: false };
+  getState().players.set(id, fresh);
+  void persistNewPlayer(fresh);
+  return fresh;
+}
+
+/**
+ * Inserts a new player without ever overwriting a stored row. If the row already existed (the lookup
+ * above timed out on a cold pool), the stored player replaces the fresh copy, unless it changed meanwhile.
+ */
+async function persistNewPlayer(fresh: Player): Promise<void> {
+  try {
+    const inserted = await db.insertPlayerIfAbsent(fresh);
+    if (inserted !== false) return;
+    const stored = await db.getPlayer(fresh.id);
+    if (stored && getState().players.get(fresh.id) === fresh) getState().players.set(fresh.id, stored);
+  } catch (error: unknown) {
+    console.error(`[engine] could not persist new player ${fresh.id}:`, error instanceof Error ? error.message : error);
+  }
 }
 
 /**
@@ -250,11 +268,15 @@ function buildQuest(playerId: string, input: NewQuestInput): Quest {
   };
 }
 
+function stopCountdown(questId: string): void {
+  const timer = getState().timers.get(questId);
+  if (timer) clearInterval(timer);
+  getState().timers.delete(questId);
+}
+
 function stopQuest(quest: Quest): void {
   if (getActiveQuest(quest.playerId)?.id === quest.id) clearActiveQuest(quest.playerId);
-  const timer = getState().timers.get(quest.id);
-  if (timer) clearInterval(timer);
-  getState().timers.delete(quest.id);
+  stopCountdown(quest.id);
 }
 
 /**
@@ -465,6 +487,8 @@ export interface CompleteOptions {
 async function awardQuest(playerId: string, questId: string, options: CompleteOptions = {}): Promise<CompletionResult> {
   await requirePlayer(playerId);
   requireActiveQuest(playerId, questId);
+  // The vow is earned: stop its countdown now, so a slow DB below can't let the timer fail it.
+  stopCountdown(questId);
   const baselines = await getBaselines(playerId);
   await loadWallet(playerId);
   const active = requireActiveQuest(playerId, questId); // re-check after the awaits

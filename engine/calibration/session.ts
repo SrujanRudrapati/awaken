@@ -258,6 +258,7 @@ async function beginMind(session: Session, now: number) {
   requireNotScored(session, 'mind');
   if (!session.mind) {
     const pool = await generatePool();
+    if (session.mind) return mindStatus(session.mind); // an overlapping begin won while we waited: same quiz for both
     const endsAt = now + MIND_DURATION_MS;
     const timer = setTimeout(() => {
       finishMind(session);
@@ -268,7 +269,11 @@ async function beginMind(session: Session, now: number) {
     if (session.mind.current) session.mind.asked.add(session.mind.current.id);
     announceStage(session.playerId, 'mind', 'started', { detail: '2-minute adaptive quiz', endsAt });
   }
-  return { endsAt: new Date(session.mind.endsAt).toISOString(), question: session.mind.current ? publicQuestion(session.mind.current) : null };
+  return mindStatus(session.mind);
+}
+
+function mindStatus(mind: NonNullable<Session['mind']>) {
+  return { endsAt: new Date(mind.endsAt).toISOString(), question: mind.current ? publicQuestion(mind.current) : null };
 }
 
 async function answerMind(session: Session, questionId: string, answerIndex: number, now: number) {

@@ -62,7 +62,8 @@ export async function startReadingTrial(playerId: string, questId: string, now =
       return parsed.success ? [parsed.data] : [];
     });
     if (questions.length < TRIAL_QUESTIONS) throw new QuestError('Iris could not write the trial right now. Try again in a moment.', 409);
-    trial = { questions: questions.slice(0, TRIAL_QUESTIONS), deadline: now + TRIAL_QUESTIONS * SECONDS_PER_QUESTION * 1_000 };
+    // An overlapping start may have stored a trial while we waited: first one wins, so the screen and the grader agree.
+    trial = trials().get(questId) ?? { questions: questions.slice(0, TRIAL_QUESTIONS), deadline: now + TRIAL_QUESTIONS * SECONDS_PER_QUESTION * 1_000 };
     trials().set(questId, trial);
   }
   return {
