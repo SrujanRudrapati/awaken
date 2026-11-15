@@ -7,7 +7,7 @@ import {
   answerQuizTrial, answerReadTrial, fetchLastNight, fetchQuizTrial, fetchReadTrial, startUrgentVow, startVow, submitPhoto,
   type NewVow as NewVowInput, type Trial,
 } from '../../components/oath/api';
-import { announcementFor } from '../../components/oath/events';
+import { announcementFor, plainTitle } from '../../components/oath/events';
 import { Iris } from '../../components/oath/Iris';
 import { NotSworn, OathShell } from '../../components/oath/OathShell';
 import { useIris } from '../../components/oath/useIris';
@@ -203,7 +203,7 @@ export function TodayClient() {
             </section>
           </div>
         )}
-        {openTrial && <TrialSheet title={openTrial.vow.title} trial={openTrial.trial} onSubmit={submitTrial} onClose={() => setOpenTrial(null)} />}
+        {openTrial && <TrialSheet title={plainTitle(openTrial.vow.title)} trial={openTrial.trial} onSubmit={submitTrial} onClose={() => setOpenTrial(null)} />}
         <Announcement message={announcement} onDismiss={() => setAnnouncement(null)} />
       </OathShell>
     </MotionConfig>

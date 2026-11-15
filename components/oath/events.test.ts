@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { Quest, StreamEvent } from '../../lib/schemas';
-import { announcementFor, eventPersonId, isForPerson, rejectionLine } from './events';
+import { announcementFor, eventPersonId, isForPerson, plainTitle, rejectionLine } from './events';
 
 const quest: Quest = {
   id: 'q1', playerId: 'ada', stat: 'STR', title: 'Push-ups', type: 'pushup', target: 10, progress: 0, xp: 20,
@@ -55,5 +55,12 @@ describe('announcementFor', () => {
 
   test('stays quiet for ordinary events', () => {
     expect(announcementFor({ type: 'rep', playerId: 'ada', questId: 'q1', count: 1 })).toBeNull();
+  });
+});
+
+describe('plainTitle', () => {
+  test('drops a leading tag and keeps untagged titles', () => {
+    expect(plainTitle('[RECKONING] Mind Trial')).toBe('Mind Trial');
+    expect(plainTitle('Make your bed')).toBe('Make your bed');
   });
 });

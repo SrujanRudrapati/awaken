@@ -1,6 +1,7 @@
 'use client';
 /** One vow on the Today screen: what it is, how far along, and the single thing you can do about it. Presentational. */
 import Link from 'next/link';
+import { plainTitle } from '../../components/oath/events';
 import type { Quest } from '../../lib/schemas';
 import { fraction, isPhoneCounted, progressLabel, proofSource, statLabel, vowAction, vowTone } from './vows';
 
@@ -25,7 +26,7 @@ export function VowRow({ vow, isBusy, note, onBegin, onPhoto, onTrial }: VowRowP
       </div>
       <div className="vow-main">
         <div className="vow-text">
-          <h3>{vow.title}</h3>
+          <h3>{plainTitle(vow.title)}</h3>
           <p className="mute">{progressLabel(vow)}{vow.topic ? ` · ${vow.topic}` : ''}</p>
         </div>
         {action === 'begin' && (

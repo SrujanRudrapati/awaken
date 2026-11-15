@@ -30,6 +30,11 @@ export function rejectionLine(reason: string): string {
   return clean ? `Not counted — ${clean.toLowerCase()}` : 'Not counted';
 }
 
+/** Vow titles can arrive tagged, e.g. "[RECKONING] Mind Trial"; screens show the plain title. */
+export function plainTitle(title: string): string {
+  return title.replace(/^\[[^\]]*\]\s*/, '') || title;
+}
+
 export interface AnnouncementCopy {
   tone: AnnouncementTone;
   header: string;
@@ -41,7 +46,7 @@ export interface AnnouncementCopy {
 export function announcementFor(event: StreamEvent): AnnouncementCopy | null {
   switch (event.type) {
     case 'quest.complete':
-      return { tone: 'blue', header: 'Vow kept', title: event.quest.title, detail: `+${event.xpGained} Proof` };
+      return { tone: 'blue', header: 'Vow kept', title: plainTitle(event.quest.title), detail: `+${event.xpGained} Proof` };
     case 'levelup':
       return { tone: 'gold', header: 'Ascension', title: `Level ${event.level}`, detail: `Rank ${event.toRank}` };
     case 'rank.up':
