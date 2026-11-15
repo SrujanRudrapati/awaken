@@ -34,6 +34,7 @@ import {
   failQuest,
   getPlayer,
   getQuest,
+  grantProof,
   listQuests,
   purgePlayers,
   resetEngine,
@@ -107,6 +108,35 @@ describe('quest engine', () => {
     expect(squat.sessionId).toMatch(/^[a-f0-9]{8}$/);
     expect(getQuest(squat.id)?.sessionId).toBe(squat.sessionId);
     expect(photo.sessionId).toBeUndefined();
+  });
+
+  it('a new player is not written to Tiger until the insert-if-absent settles; a stored row then wins', async () => {
+    const stored = {
+      id: 'old', name: 'Old', rank: 'D' as const, level: 4, xp: 160, penalty: false,
+      stats: { STR: 3, INT: 0, FOCUS: 0, VIT: 0, DISCIPLINE: 0, CHA: 0 },
+    };
+    let settle: (inserted: boolean) => void = () => {};
+    vi.mocked(db.getPlayer).mockReturnValueOnce(new Promise(() => {})).mockResolvedValueOnce(stored);
+    vi.mocked(db.insertPlayerIfAbsent).mockReturnValueOnce(new Promise((resolve) => (settle = resolve)));
+
+    await createPlayer({ name: 'Old', id: 'old' });
+    await grantProof('old', 10, 'test'); // acts before the insert settles
+
+    expect(db.upsertPlayer).not.toHaveBeenCalled();
+    settle(false);
+    await vi.waitFor(async () => expect((await getPlayer('old'))?.xp).toBe(160));
+    expect(db.upsertPlayer).not.toHaveBeenCalled();
+  });
+
+  it('once a new player is inserted, changes made meanwhile are saved', async () => {
+    let settle: (inserted: boolean) => void = () => {};
+    vi.mocked(db.insertPlayerIfAbsent).mockReturnValueOnce(new Promise((resolve) => (settle = resolve)));
+
+    await createPlayer({ name: 'New', id: 'new' });
+    await grantProof('new', 10, 'test');
+    settle(true);
+
+    await vi.waitFor(() => expect(db.upsertPlayer).toHaveBeenCalledWith(expect.objectContaining({ id: 'new', xp: 10 })));
   });
 
   it('rejects quests for unknown players', async () => {

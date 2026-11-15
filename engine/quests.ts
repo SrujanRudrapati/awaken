@@ -75,13 +75,22 @@ interface EngineState {
   timers: Map<string, ReturnType<typeof setInterval>>;
   /** DEMO_MODE: the next urgent vow pays a rank-up, until one is kept (set by demo:reset). */
   rankUpArmed: boolean;
+  /** New players whose insert-if-absent hasn't settled: never upserted until it has (a stored row may exist). */
+  pendingInsert: Set<string>;
+  /** pendingInsert ids with an insert in flight. */
+  inserting: Set<string>;
 }
 
 const globalForEngine = globalThis as typeof globalThis & { __awakenEngine?: EngineState };
 
 function getState(): EngineState {
-  globalForEngine.__awakenEngine ??= { players: new Map(), quests: new Map(), timers: new Map(), rankUpArmed: false };
-  return globalForEngine.__awakenEngine;
+  globalForEngine.__awakenEngine ??= {
+    players: new Map(), quests: new Map(), timers: new Map(), rankUpArmed: false, pendingInsert: new Set(), inserting: new Set(),
+  };
+  const state = globalForEngine.__awakenEngine;
+  state.pendingInsert ??= new Set(); // hot reload over an older state shape
+  state.inserting ??= new Set();
+  return state;
 }
 
 /** Test hook: forget players, quests and timers. */
@@ -100,6 +109,10 @@ function zeroStats(): Player['stats'] {
 
 function savePlayer(player: Player): Player {
   getState().players.set(player.id, player);
+  if (getState().pendingInsert.has(player.id)) {
+    void persistNewPlayer(player.id); // memory only until we know Tiger has no stored row for this id
+    return player;
+  }
   db.upsertPlayer(player).catch((error: unknown) =>
     console.error(`[engine] could not persist player ${player.id}:`, error instanceof Error ? error.message : error),
   );
@@ -152,22 +165,36 @@ export async function createPlayer(input: { name: string; id?: string }): Promis
   const id = input.id ?? randomUUID();
   const fresh: Player = { id, name: input.name, rank: 'E', level: 1, xp: 0, stats: zeroStats(), penalty: false };
   getState().players.set(id, fresh);
-  void persistNewPlayer(fresh);
+  getState().pendingInsert.add(id);
+  void persistNewPlayer(id);
   return fresh;
 }
 
 /**
- * Inserts a new player without ever overwriting a stored row. If the row already existed (the lookup
- * above timed out on a cold pool), the stored player replaces the fresh copy, unless it changed meanwhile.
+ * Inserts a new player without ever overwriting a stored row (the lookup may have timed out on a cold pool).
+ * - inserted: the id was new; any changes made meanwhile are saved now.
+ * - already stored: the stored player replaces the blank one in memory (changes made meanwhile are dropped).
+ * - DB error: stays pending; the next save retries. No database: nothing to protect.
  */
-async function persistNewPlayer(fresh: Player): Promise<void> {
+async function persistNewPlayer(id: string): Promise<void> {
+  const state = getState();
+  if (state.inserting.has(id) || !state.pendingInsert.has(id)) return;
+  const sent = state.players.get(id);
+  if (!sent) return;
+  state.inserting.add(id);
   try {
-    const inserted = await db.insertPlayerIfAbsent(fresh);
-    if (inserted !== false) return;
-    const stored = await db.getPlayer(fresh.id);
-    if (stored && getState().players.get(fresh.id) === fresh) getState().players.set(fresh.id, stored);
+    const inserted = await db.insertPlayerIfAbsent(sent);
+    if (inserted === false) {
+      const stored = await db.getPlayer(id);
+      if (stored) state.players.set(id, stored);
+    }
+    state.pendingInsert.delete(id);
+    const now = state.players.get(id);
+    if (inserted === true && now && now !== sent) savePlayer(now);
   } catch (error: unknown) {
-    console.error(`[engine] could not persist new player ${fresh.id}:`, error instanceof Error ? error.message : error);
+    console.error(`[engine] could not persist new player ${id} (will retry on next change):`, error instanceof Error ? error.message : error);
+  } finally {
+    state.inserting.delete(id);
   }
 }
 
