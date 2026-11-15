@@ -83,3 +83,17 @@ curl -i -X POST localhost:3000/api/demo/reset                          # no CRON
 - [ ] ⚠️ `.env.local` has **two** `CRON_SECRET=` and **two** `SYNC_TOKEN=` lines with different values. The last one wins.
       Delete the stale pair so the Shortcut/Watch/Maritime all use the same value.
 - [ ] Later: deploy to Vercel for the public leaderboard (set the same env vars there).
+
+---
+
+## Phase 7C — Watch notifications (ntfy)
+
+Sent on: daily drop `[DAILY QUEST HAS ARRIVED]`, `[EMERGENCY QUEST]` (urgent), `[PENALTY ZONE]` (urgent),
+`[QUEST COMPLETE]`, `[LEVEL UP]` (high). No-op if `NTFY_TOPIC` is empty.
+
+- [ ] iPhone: install **ntfy** (App Store) → `+` → subscribe to the exact `NTFY_TOPIC` from `.env.local`
+      (server `ntfy.sh`). Allow notifications. Watch app → Notifications → ntfy → **Mirror iPhone alerts**.
+- [ ] Test without the app: `curl -d 'System online' -H 'Title: [SYSTEM]' ntfy.sh/$NTFY_TOPIC` → phone + Watch buzz.
+- [ ] With the app: `POST /api/quest/emergency` for a demo player → `[EMERGENCY QUEST]` on the Watch within ~2 s.
+- [ ] iPhone locked + Watch on wrist: urgent alerts (emergency/penalty) still come through. If Focus mode blocks
+      them, allow ntfy in Focus settings.

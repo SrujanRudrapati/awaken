@@ -11,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { publish } from '../lib/bus';
 import * as db from '../lib/db';
 import { send, sendAll } from '../lib/device';
+import { notify } from '../lib/notify';
 import { StatSchema, type Difficulty, type Player, type Quest, type QuestKind, type QuestType } from '../lib/schemas';
 import {
   DAILY_TEMPLATES,
@@ -316,6 +317,7 @@ async function awardQuest(playerId: string, questId: string): Promise<Completion
   db.logEvent({ playerId, kind: 'xp', stat: quest.stat, value: quest.xp, source: 'engine' });
   db.logEvent({ playerId, kind: 'quest.complete', stat: quest.stat, value: 1, source: 'engine' });
   publish({ type: 'quest.complete', quest, xpGained: quest.xp });
+  notify({ title: '[QUEST COMPLETE]', message: `${quest.title} · +${quest.xp} XP`, tags: ['white_check_mark'] });
 
   const leveledUp = updated.level > player.level;
   if (leveledUp) announceLevelUp(player, updated);
@@ -343,6 +345,12 @@ function announceLevelUp(before: Player, after: Player): void {
   publish({ type: 'levelup', playerId: after.id, fromRank: before.rank, toRank: after.rank, level: after.level });
   db.logEvent({ playerId: after.id, kind: 'levelup', value: after.level, source: 'engine' });
   void sendAll(['BUZZ:chime', 'SEG:LVUP']);
+  notify({
+    title: '[LEVEL UP]',
+    message: `${after.name} reached level ${after.level} · Rank ${after.rank}`,
+    priority: 'high',
+    tags: ['zap'],
+  });
   setTimeout(() => {
     if (getState().timers.size > 0) return; // a countdown owns the display now
     void send(rankSegment(after.rank));
@@ -392,7 +400,10 @@ export async function failQuest(
   db.logEvent({ playerId, kind: 'penalty', stat: quest.stat, value: 1, verified: true, source: 'engine' });
   publish({ type: 'quest.update', quest });
   publish({ type: 'penalty', playerId, questId, reason });
-  if (!options.quiet) void sendAll(['BUZZ:alarm', 'SEG:FAIL']);
+  if (!options.quiet) {
+    void sendAll(['BUZZ:alarm', 'SEG:FAIL']);
+    notify({ title: '[PENALTY ZONE]', message: reason, priority: 'urgent', tags: ['warning'] });
+  }
 
   if (options.spawnPenalty === false) return { quest, penaltyQuest: null };
   const penaltyQuest = storeQuest(buildPenaltyQuest(quest));
@@ -454,6 +465,7 @@ export async function emergencyQuest(playerId: string, type: QuestType = 'pushup
   const xp = isDemoMode() && brandNew ? Math.max(built.xp, demoRankUpXp(player.xp)) : built.xp;
   const quest = launch(storeQuest({ ...built, xp }));
   void sendAll(['BUZZ:alarm', segNumber(EMERGENCY_SECONDS)]);
+  notify({ title: '[EMERGENCY QUEST]', message: quest.title, priority: 'urgent', tags: ['rotating_light'] });
 
   const timer = setInterval(() => {
     const secondsLeft = Math.ceil((deadline.getTime() - Date.now()) / 1_000);
@@ -499,6 +511,12 @@ export async function sweepExpired(now = new Date()): Promise<number> {
     if (result) failedByPlayer.set(quest.playerId, [...(failedByPlayer.get(quest.playerId) ?? []), result.quest]);
   }
   for (const failed of failedByPlayer.values()) {
+    notify({
+      title: '[PENALTY ZONE]',
+      message: `Missed: ${failed.map((q) => q.title).join(', ')}. A penalty quest has been issued.`,
+      priority: 'urgent',
+      tags: ['warning'],
+    });
     const source = failed.find((q) => q.kind !== 'penalty') ?? failed[0];
     const penaltyQuest = storeQuest(buildPenaltyQuest(source));
     publish({ type: 'quest.update', quest: penaltyQuest });
@@ -532,6 +550,10 @@ export async function dailyDrop(now = new Date(), design: QuestDesigner = templa
       .map((t) => storeQuest(buildQuest(player.id, { ...t, kind: 'daily', deadline: endOfDay(now) })));
     quests.forEach((quest) => publish({ type: 'quest.update', quest }));
     dropped[player.id] = quests;
+  }
+  const titles = [...new Set(Object.values(dropped).flat().map((q) => q.title))];
+  if (titles.length > 0) {
+    notify({ title: '[DAILY QUEST HAS ARRIVED]', message: titles.join('\n'), priority: 'high', tags: ['scroll'] });
   }
   return dropped;
 }

@@ -6,6 +6,7 @@ vi.mock('../lib/db', () => ({
   listPlayers: vi.fn().mockResolvedValue([]),
   logEvent: vi.fn(),
 }));
+vi.mock('../lib/notify', () => ({ notify: vi.fn() }));
 vi.mock('../lib/device', () => ({
   send: vi.fn().mockResolvedValue(true),
   sendAll: vi.fn().mockResolvedValue(true),
@@ -15,6 +16,7 @@ import { PUSHUP_REP_MS, waveform } from '../bridge/simulator';
 import { subscribe } from '../lib/bus';
 import * as db from '../lib/db';
 import { send, sendAll } from '../lib/device';
+import { notify } from '../lib/notify';
 import type { Reading, StreamEvent } from '../lib/schemas';
 import { DAILY_TEMPLATES } from './progression';
 import {
@@ -105,6 +107,10 @@ describe('quest engine', () => {
     expect(player).toMatchObject({ xp: 120, level: 3, rank: 'D' });
     expect(ofType('levelup')).toEqual([{ type: 'levelup', playerId: 'p1', fromRank: 'E', toRank: 'D', level: 3 }]);
     expect(sendAll).toHaveBeenCalledWith(['BUZZ:chime', 'SEG:LVUP']);
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: '[QUEST COMPLETE]' }));
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '[LEVEL UP]', message: 'Jin reached level 3 · Rank D', priority: 'high' }),
+    );
     await vi.advanceTimersByTimeAsync(2_000);
     expect(send).toHaveBeenCalledWith('SEG:RK-D');
   });
@@ -176,6 +182,7 @@ describe('quest engine', () => {
     expect((await getPlayer('p1'))?.penalty).toBe(true);
     expect(ofType('penalty')).toEqual([{ type: 'penalty', playerId: 'p1', questId: quest.id, reason: 'Gave up' }]);
     expect(sendAll).toHaveBeenCalledWith(['BUZZ:alarm', 'SEG:FAIL']);
+    expect(notify).toHaveBeenCalledWith({ title: '[PENALTY ZONE]', message: 'Gave up', priority: 'urgent', tags: ['warning'] });
     expect(penaltyQuest).toMatchObject({ type: 'squat', difficulty: 'hard', kind: 'penalty', status: 'active' });
     expect(getActiveQuest('p1')).toBeUndefined(); // sensors stop counting the failed quest
   });
@@ -264,6 +271,7 @@ describe('quest engine', () => {
 
       expect(quest).toMatchObject({ kind: 'emergency', target: 10, type: 'pushup' });
       expect(sendAll).toHaveBeenCalledWith(['BUZZ:alarm', 'SEG:  30']);
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: '[EMERGENCY QUEST]', priority: 'urgent' }));
       await vi.advanceTimersByTimeAsync(1_000);
       expect(send).toHaveBeenCalledWith('SEG:  29');
 
@@ -391,6 +399,9 @@ describe('quest engine', () => {
       expect(first.b).toHaveLength(DAILY_TEMPLATES.length);
       expect(first.a.every((q) => q.kind === 'daily' && q.deadline.startsWith('2026-11-1'))).toBe(true);
       expect(second.a).toEqual([]);
+      const daily = vi.mocked(notify).mock.calls.filter(([n]) => n.title === '[DAILY QUEST HAS ARRIVED]');
+      expect(daily).toHaveLength(1); // one alert for the drop, none for the empty second call
+      expect(daily[0][0].message.split('\n')).toHaveLength(DAILY_TEMPLATES.length); // titles deduped across players
     });
 
     it('includes players only known to Tiger Data', async () => {
