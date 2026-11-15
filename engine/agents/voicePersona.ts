@@ -12,10 +12,22 @@ Voice:
 
 Output: exactly one line, at most 15 words, no quotation marks, no markdown.`;
 
-export type VoiceEventType = 'levelup' | 'penalty' | 'emergency' | 'quest.complete' | 'daily' | 'rep.rejected';
+export type VoiceEventType =
+  | 'awakening'
+  | 'levelup'
+  | 'penalty'
+  | 'emergency'
+  | 'quest.complete'
+  | 'quest.start'
+  | 'daily'
+  | 'rep.rejected';
 
 /** Canned fallbacks per event (rotated). Each ≤ 15 words, same persona. */
 export const CANNED_LINES: Record<VoiceEventType, readonly string[]> = {
+  awakening: [
+    'You have been chosen. The System is now bound to you, Player.',
+    'Awakening confirmed. From this day, your trials begin.',
+  ],
   levelup: [
     'Your limits have been rewritten. Rank ascension confirmed.',
     'The System acknowledges your growth. A new rank is granted.',
@@ -34,6 +46,10 @@ export const CANNED_LINES: Record<VoiceEventType, readonly string[]> = {
     'Quest complete. Reward granted.',
     'Trial cleared. Your strength has been recorded.',
     'Objective fulfilled. The System is watching.',
+  ],
+  'quest.start': [
+    'A quest has begun. The System is counting.',
+    'Trial accepted. Do not stop until it is complete.',
   ],
   daily: [
     'The daily quests have arrived. Failure is not permitted.',

@@ -186,6 +186,8 @@ export const StreamEventSchema = z.discriminatedUnion('type', [
     text: z.string().min(1),
     eventType: z.string().min(1), // which event triggered the line
     playerId: Id.optional(),
+    /** Polly MP3 (`/api/voice/<hash>.mp3`); absent → the browser speaks `text` itself. */
+    audioUrl: z.string().startsWith('/api/voice/').optional(),
   }),
 ]);
 export type StreamEvent = z.infer<typeof StreamEventSchema>;

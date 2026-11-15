@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../lib/llm', () => ({ claude: vi.fn() }));
+vi.mock('../../lib/aws/polly', () => ({ speak: vi.fn(async () => null) }));
 
 import { publish, subscribe } from '../../lib/bus';
+import { speak } from '../../lib/aws/polly';
 import { claude } from '../../lib/llm';
 import type { Quest, StreamEvent } from '../../lib/schemas';
-import { VOICE_WINDOW_MS, startVoice, stopVoice } from './voice';
+import { VOICE_WINDOW_MS, announceAwakening, startVoice, stopVoice } from './voice';
 import { CANNED_LINES, sanitizeLine } from './voicePersona';
 
 const quest = (over: Partial<Quest> = {}): Quest => ({
@@ -76,6 +78,31 @@ describe('System voice', () => {
 
     expect(voices).toHaveLength(1);
     expect(claude).not.toHaveBeenCalled();
+  });
+
+  it('announces a manual quest start once; penalty quests are left to the penalty line', async () => {
+    vi.mocked(claude).mockResolvedValue(null);
+    publish({ type: 'quest.update', quest: quest({ id: 'm1', status: 'active', progress: 0, kind: 'manual' }) });
+    await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
+    publish({ type: 'quest.update', quest: quest({ id: 'm1', status: 'active', progress: 3, kind: 'manual' }) });
+    publish({ type: 'quest.update', quest: quest({ id: 'x1', status: 'active', progress: 0, kind: 'penalty' }) });
+    await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
+
+    expect(voices.map((v) => v.eventType)).toEqual(['quest.start']);
+    expect(CANNED_LINES['quest.start']).toContain(voices[0].text);
+  });
+
+  it('awakening speaks for a new player and carries the Polly audio URL when available', async () => {
+    vi.mocked(claude).mockResolvedValue('Awakening confirmed. Your trials begin now, Player.');
+    vi.mocked(speak).mockResolvedValueOnce(`/api/voice/${'a'.repeat(64)}.mp3`);
+
+    announceAwakening('p9', 'Mina');
+    await vi.advanceTimersByTimeAsync(VOICE_WINDOW_MS);
+
+    expect(voices).toEqual([
+      { type: 'voice', eventType: 'awakening', playerId: 'p9', text: 'Awakening confirmed. Your trials begin now, Player.', audioUrl: `/api/voice/${'a'.repeat(64)}.mp3` },
+    ]);
+    expect(vi.mocked(claude).mock.calls[0][0].prompt).toContain('Mina');
   });
 
   it('startVoice twice does not double-speak', async () => {

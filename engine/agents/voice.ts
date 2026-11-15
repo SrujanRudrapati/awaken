@@ -6,6 +6,7 @@
  * Started once per process by startVoice() (the SSE route calls it). rep.rejected uses canned
  * lines only (it fires too often to spend a model call on).
  */
+import { speak as synthesize } from '../../lib/aws/polly';
 import { publish, subscribe } from '../../lib/bus';
 import { claude } from '../../lib/llm';
 import type { StreamEvent } from '../../lib/schemas';
@@ -19,10 +20,12 @@ export const VOICE_TIMEOUT_MS = 3_000;
 const REJECT_COOLDOWN_MS = 5_000;
 
 const PRIORITY: Record<VoiceEventType, number> = {
+  awakening: 6,
   levelup: 5,
   penalty: 4,
   emergency: 3,
   'quest.complete': 2,
+  'quest.start': 1,
   daily: 1,
   'rep.rejected': 0,
 };
@@ -59,7 +62,8 @@ export function momentFor(event: StreamEvent, seenQuestIds: Set<string>): Moment
       seenQuestIds.add(quest.id);
       if (quest.kind === 'emergency') return { type: 'emergency', playerId: quest.playerId, facts: `Emergency: "${quest.title}".` };
       if (quest.kind === 'daily') return { type: 'daily', playerId: quest.playerId, facts: 'New daily quests were issued.' };
-      return null;
+      if (quest.kind === 'penalty') return null; // the `penalty` event already speaks for it
+      return { type: 'quest.start', playerId: quest.playerId, facts: `Quest started: "${quest.title}".` };
     }
     case 'rep.rejected':
       return { type: 'rep.rejected', playerId: event.playerId, facts: event.reason };
@@ -86,11 +90,16 @@ async function speak(state: VoiceState, moment: Moment): Promise<void> {
             timeoutMs: VOICE_TIMEOUT_MS,
           }),
         );
-  publish({ type: 'voice', text: line ?? canned(state, moment.type), eventType: moment.type, playerId: moment.playerId });
+  const text = line ?? canned(state, moment.type);
+  const audioUrl = (await synthesize(text)) ?? undefined;
+  publish({ type: 'voice', text, eventType: moment.type, playerId: moment.playerId, audioUrl });
 }
 
 function onEvent(state: VoiceState, event: StreamEvent): void {
-  const moment = momentFor(event, state.seenQuestIds);
+  queueMoment(state, momentFor(event, state.seenQuestIds));
+}
+
+function queueMoment(state: VoiceState, moment: Moment | null): void {
   if (!moment) return;
   if (moment.type === 'rep.rejected') {
     const now = Date.now();
@@ -104,6 +113,13 @@ function onEvent(state: VoiceState, event: StreamEvent): void {
     state.timer = null;
     if (chosen) void speak(state, chosen);
   }, VOICE_WINDOW_MS);
+}
+
+/** A new player was created: the System binds itself to them (no bus event exists for this). */
+export function announceAwakening(playerId: string, name: string): void {
+  startVoice();
+  const state = globalForVoice.__awakenVoice;
+  if (state) queueMoment(state, { type: 'awakening', playerId, facts: `A new player named ${name} has awakened.` });
 }
 
 /** Starts the voice once per process (safe to call from every route). */

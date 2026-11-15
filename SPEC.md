@@ -104,6 +104,7 @@ Laptop → Home Base (one per line, `DeviceCommandSchema`): `SEG:<4 chars>`, `LO
 
 ### SSE events (backend → web app)
 `reading`, `rep`, `rep.rejected` (half-rep → "REP NOT COUNTED"), `quest.update`, `quest.complete`, `levelup`, `penalty`, `voice`. Payloads: `StreamEventSchema` in `lib/schemas.ts`.
+`voice` may carry `audioUrl` (Polly MP3 at `/api/voice/<hash>.mp3`); without it the browser speaks the text (`lib/voicePlayback.ts`).
 
 ### Verifiers (code, not AI — must be reliable)
 - **Push-up (pad):** Home Base pad 0→1→0 = rep (counted on release). 80 ms debounce, ≥ 0.6 s between reps ("too fast"), pad held > 3 s ignored (resting).

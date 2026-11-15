@@ -13,7 +13,8 @@
     "demo:reset": "tsx scripts/demo-reset.ts",
     "tunnel": "cloudflared tunnel --url http://localhost:3000",
     "smoke:designer": "tsx scripts/smoke-designer.ts",
-    "db:migrate": "tsx scripts/migrate.ts"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "voice:pregen": "tsx scripts/voice-pregen.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
