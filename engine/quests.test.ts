@@ -96,6 +96,17 @@ describe('quest engine', () => {
     expect((await getPlayer('old'))?.xp).toBe(160);
   });
 
+  it('a sensor vow start returns its sessionId; non-sensor vows have none', async () => {
+    await createPlayer({ name: 'Jin', id: 'p1' });
+
+    const squat = await startQuest('p1', { type: 'squat' });
+    const photo = await startQuest('p1', { type: 'photo' });
+
+    expect(squat.sessionId).toMatch(/^[a-f0-9]{8}$/);
+    expect(getQuest(squat.id)?.sessionId).toBe(squat.sessionId);
+    expect(photo.sessionId).toBeUndefined();
+  });
+
   it('rejects quests for unknown players', async () => {
     await expect(startQuest('ghost', { type: 'pushup' })).rejects.toMatchObject({ status: 404 });
   });
@@ -104,7 +115,7 @@ describe('quest engine', () => {
     await createPlayer({ name: 'Jin', id: 'p1' });
     const quest = await startQuest('p1', { type: 'pushup', difficulty: 'normal', target: 3 });
 
-    pushups(3).forEach(routeReading);
+    pushups(3).forEach((r) => routeReading(r));
     await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('done'));
 
     const player = await getPlayer('p1');
@@ -156,11 +167,11 @@ describe('quest engine', () => {
     await createPlayer({ name: 'A', id: 'a' });
     await createPlayer({ name: 'B', id: 'b' });
     const questA = await startQuest('a', { type: 'pushup', target: 10 });
-    pushups(2).forEach(routeReading);
+    pushups(2).forEach((r) => routeReading(r));
     await startQuest('b', { type: 'squat', target: 10 }); // B takes over the Home Base
 
     await startQuest('a', { questId: questA.id });
-    pushups(2, 100_000).forEach(routeReading);
+    pushups(2, 100_000).forEach((r) => routeReading(r));
 
     expect(getQuest(questA.id)?.progress).toBe(4);
   });
@@ -244,13 +255,13 @@ describe('quest engine', () => {
   it('switching sensor quests keeps the paused quest progress and resumes it', async () => {
     await createPlayer({ name: 'Jin', id: 'p1' });
     const first = await startQuest('p1', { type: 'pushup', target: 10 });
-    pushups(2).forEach(routeReading);
+    pushups(2).forEach((r) => routeReading(r));
 
     await startQuest('p1', { type: 'squat', target: 10 });
     expect(getQuest(first.id)?.progress).toBe(2);
 
     await startQuest('p1', { questId: first.id });
-    pushups(1, 100_000).forEach(routeReading);
+    pushups(1, 100_000).forEach((r) => routeReading(r));
     expect(getQuest(first.id)?.progress).toBe(3);
   });
 
@@ -295,7 +306,7 @@ describe('quest engine', () => {
       const quest = await startQuest('p1', { type: 'jail' });
       expect(quest.target).toBe(20);
 
-      jailReadings(1, 0, 20_500).forEach(routeReading);
+      jailReadings(1, 0, 20_500).forEach((r) => routeReading(r));
 
       await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('done'));
       expect(send).toHaveBeenCalledWith('LOCK');
@@ -308,7 +319,7 @@ describe('quest engine', () => {
       await createPlayer({ name: 'Jin', id: 'p1' });
       const quest = await startQuest('p1', { type: 'jail', target: 60 });
 
-      [...jailReadings(1, 0, 5_000), ...jailReadings(0, 5_000, 7_000)].forEach(routeReading);
+      [...jailReadings(1, 0, 5_000), ...jailReadings(0, 5_000, 7_000)].forEach((r) => routeReading(r));
 
       await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('failed'));
       expect(send).toHaveBeenCalledWith('UNLOCK');
@@ -319,7 +330,7 @@ describe('quest engine', () => {
     it('switching to another sensor quest mid-lock releases the jail', async () => {
       await createPlayer({ name: 'Jin', id: 'p1' });
       await startQuest('p1', { type: 'jail', target: 60 });
-      jailReadings(1, 0, 2_000).forEach(routeReading);
+      jailReadings(1, 0, 2_000).forEach((r) => routeReading(r));
       vi.mocked(send).mockClear();
 
       await startQuest('p1', { type: 'pushup' });
@@ -351,7 +362,7 @@ describe('quest engine', () => {
       await createPlayer({ name: 'Jin', id: 'p1' });
       const quest = await emergencyQuest('p1');
 
-      pushups(10).forEach(routeReading);
+      pushups(10).forEach((r) => routeReading(r));
       await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('done'));
       vi.mocked(send).mockClear();
       await vi.advanceTimersByTimeAsync(EMERGENCY_SECONDS * 1_000);
@@ -366,7 +377,7 @@ describe('quest engine', () => {
       const quest = await emergencyQuest('p1');
       await vi.advanceTimersByTimeAsync((EMERGENCY_SECONDS - 0.5) * 1_000);
 
-      pushups(10).forEach(routeReading);
+      pushups(10).forEach((r) => routeReading(r));
       await vi.advanceTimersByTimeAsync(3_000);
 
       expect(getQuest(quest.id)?.status).toBe('done');
@@ -406,7 +417,7 @@ describe('quest engine', () => {
         await createPlayer({ name: 'Jin', id: 'demo-1' });
 
         const quest = await emergencyQuest('demo-1');
-        pushups(10).forEach(routeReading);
+        pushups(10).forEach((r) => routeReading(r));
         await vi.waitFor(() => expect(getQuest(quest.id)?.status).toBe('done'));
 
         expect(quest.xp).toBe(228); // spread over STR/VIT/INT/FOCUS: 4 × √57 ≥ 30 Power = rank D

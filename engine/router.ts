@@ -2,8 +2,10 @@
  * Routes sensor readings to the active quest's verifier and publishes the results
  * (`rep`, `rep.rejected`, `quest.update`, `quest.complete`) on the bus.
  *
- * Readings belong to whichever player most recently started a quest; with no quest
- * started they are ignored here (they still reach the UI as `reading` events). Each quest gets one
+ * Every started vow gets a short `sessionId`. Phone/Watch readings must carry it and count only toward
+ * that session's vow; without a valid one they are ignored. Home Base readings go to the Home Base
+ * session: the most recently started vow the Home Base can verify. With nothing to count, readings
+ * still reach the UI as `reading` events. Each quest gets one
  * verifier per sensor source that can verify it (VERIFIERS below) — e.g. push-ups count
  * from the Home Base pad or from the phone armband — and every source's reps add to the
  * same progress. Verifiers are pure code — nothing here asks an LLM whether a rep counted.
@@ -11,6 +13,7 @@
  *
  * State lives on globalThis: Next bundles each route separately and hot-reloads modules.
  */
+import { randomBytes } from 'node:crypto';
 import { publish } from '../lib/bus';
 import { logEvent } from '../lib/db';
 import { send } from '../lib/device';
@@ -63,7 +66,9 @@ const publishFailure: FailureHandler = (quest, reason) => {
 };
 
 interface ActiveEntry {
+  /** Carries `sessionId`. */
   quest: Quest;
+  sessionId: string;
   /** One fresh verifier per source that can verify this quest type. */
   verifiers: SourceVerifiers;
   /** Reps the Watch has reported for this quest so far (its count is cumulative). */
@@ -74,6 +79,7 @@ interface ActiveEntry {
 
 interface RouterState {
   active: Map<string, ActiveEntry>;
+  /** Whose vow the Home Base's readings count toward (the Home Base session). */
   currentPlayerId: string | null;
   onComplete: CompletionHandler;
   onFail: FailureHandler;
@@ -116,28 +122,46 @@ function createVerifiers(quest: Quest): SourceVerifiers {
   ) as SourceVerifiers;
 }
 
-/** Makes `quest` the one the device's readings count toward. */
-export function setActiveQuest(quest: Quest): void {
+const SESSION_BYTES = 4; // 8 hex chars: short enough to type into the Watch / simulator
+
+function newSessionId(): string {
+  return randomBytes(SESSION_BYTES).toString('hex');
+}
+
+function usesHomeBase(type: QuestType): boolean {
+  return Boolean(VERIFIERS[type]?.homebase);
+}
+
+/**
+ * Makes `quest` count sensor readings and returns its sessionId (also set on the quest).
+ * Re-opening the same vow keeps its session. Only vows the Home Base can verify take the Home Base.
+ */
+export function setActiveQuest(quest: Quest): string {
   if (quest.status !== 'active') {
     throw new Error(`Quest ${quest.id} must be active to start (status: ${quest.status})`);
   }
   const state = getState();
   const existing = state.active.get(quest.playerId);
+  const homeBase = usesHomeBase(quest.type);
   if (existing?.quest.id === quest.id) {
-    // Same vow re-opened (page reload, second tap): keep its counters, calibration, Watch total and jail lock.
-    if (state.currentPlayerId !== quest.playerId) releaseJail(state, state.currentPlayerId);
-    state.currentPlayerId = quest.playerId;
-    return;
+    // Same vow re-opened (page reload, second tap): keep its counters, calibration, Watch total, jail lock, session.
+    if (homeBase && state.currentPlayerId !== quest.playerId) releaseJail(state, state.currentPlayerId);
+    if (homeBase) state.currentPlayerId = quest.playerId;
+    return existing.sessionId;
   }
-  releaseJail(state, state.currentPlayerId); // the old focus stops getting readings: never leave a phone locked
+  if (homeBase) releaseJail(state, state.currentPlayerId); // the old focus stops getting readings: never leave a phone locked
   releaseJail(state, quest.playerId);
+  const sessionId = newSessionId();
   state.active.set(quest.playerId, {
-    quest: { ...quest },
+    quest: { ...quest, sessionId },
+    sessionId,
     verifiers: createVerifiers(quest),
     watchReps: 0,
     locked: false,
   });
-  state.currentPlayerId = quest.playerId;
+  if (homeBase) state.currentPlayerId = quest.playerId;
+  else if (state.currentPlayerId === quest.playerId) state.currentPlayerId = null; // this player's Home Base vow was replaced
+  return sessionId;
 }
 
 export function getActiveQuest(playerId: string): Quest | undefined {
@@ -220,10 +244,17 @@ function handle(state: RouterState, playerId: string, event: VerifierEvent, sour
   publish({ type: 'rep.rejected', playerId, questId: entry.quest.id, reason: event.reason });
 }
 
-export function routeReading(reading: Reading): void {
+function entryForSession(state: RouterState, sessionId: string | undefined): ActiveEntry | undefined {
+  if (!sessionId) return undefined;
+  for (const entry of state.active.values()) if (entry.sessionId === sessionId) return entry;
+  return undefined;
+}
+
+/** Home Base readings need no session; phone/Watch readings count only with their vow's `sessionId`. */
+export function routeReading(reading: Reading, sessionId?: string): void {
   const state = getState();
-  const entry = currentEntry(state);
-  if (!entry) return; // no quest started: readings only feed the live `reading` stream
+  const entry = reading.source === 'homebase' ? currentEntry(state) : entryForSession(state, sessionId);
+  if (!entry) return; // nothing to count: readings only feed the live `reading` stream
   const verifier = entry.verifiers[reading.source];
   if (!verifier) return; // this source can't verify this quest type
   for (const event of verifier.push(reading)) {

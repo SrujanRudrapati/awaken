@@ -40,3 +40,8 @@ export function takeBatch(queue: readonly Reading[]): { batch: Reading[]; rest: 
   const recent = queue.slice(-MAX_BATCH * 2); // offline for a while? keep only the last ~3 s
   return { batch: recent.slice(0, MAX_BATCH), rest: recent.slice(MAX_BATCH) };
 }
+
+/** Where a batch goes: the focused vow's sessionId makes the server count it toward that vow. */
+export function readingsUrl(sessionId: string | undefined): string {
+  return sessionId ? `/api/readings?sessionId=${encodeURIComponent(sessionId)}` : '/api/readings';
+}

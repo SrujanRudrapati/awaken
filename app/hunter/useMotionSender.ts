@@ -1,12 +1,13 @@
 'use client';
 /**
  * Streams the phone's accelerometer to POST /api/readings (source 'phone'): ~30 Hz samples,
- * one batch every 200 ms. start() must run inside a tap — iOS only grants motion access then.
+ * one batch every 200 ms, tagged with the focused vow's sessionId (untagged readings count toward nothing).
+ * start() must run inside a tap — iOS only grants motion access then.
  * Also holds a screen wake lock so the phone keeps sending from the armband.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Reading } from '../../lib/schemas';
-import { FLUSH_INTERVAL_MS, shouldKeep, takeBatch, toReading } from './motion';
+import { FLUSH_INTERVAL_MS, readingsUrl, shouldKeep, takeBatch, toReading } from './motion';
 
 export type MotionStatus = 'idle' | 'requesting' | 'streaming' | 'denied' | 'unsupported' | 'offline';
 
@@ -32,8 +33,12 @@ async function requestWakeLock(): Promise<WakeLockSentinel | null> {
   }
 }
 
-export function useMotionSender(): { status: MotionStatus; sent: number; start: () => Promise<void>; stop: () => void } {
+export function useMotionSender(sessionId: string | undefined): { status: MotionStatus; sent: number; start: () => Promise<void>; stop: () => void } {
   const [status, setStatus] = useState<MotionStatus>('idle');
+  const session = useRef(sessionId);
+  useEffect(() => {
+    session.current = sessionId;
+  }, [sessionId]);
   const [sent, setSent] = useState(0);
   const queue = useRef<Reading[]>([]);
   const lastKept = useRef<number | null>(null);
@@ -44,7 +49,7 @@ export function useMotionSender(): { status: MotionStatus; sent: number; start: 
     if (batch.length === 0) return;
     queue.current = rest;
     try {
-      const res = await fetch('/api/readings', {
+      const res = await fetch(readingsUrl(session.current), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(batch),

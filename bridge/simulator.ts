@@ -155,8 +155,12 @@ async function send(url: string, reading: Reading): Promise<void> {
 
 function run(mode: Mode): void {
   loadEnv();
-  const url = `${process.env.APP_URL || DEFAULT_APP_URL}/api/readings`;
+  // Phone (squat) readings count only toward a vow's session: `npm run sim squat <sessionId>` (from the vow start).
+  const session = process.argv[3] ?? process.env.SIM_SESSION;
+  const query = session ? `?sessionId=${encodeURIComponent(session)}` : '';
+  const url = `${process.env.APP_URL || DEFAULT_APP_URL}/api/readings${query}`;
   console.log(`[sim] mode=${mode} → POST ${url} every ${SAMPLE_MS} ms (Ctrl-C to stop)`);
+  if (mode === 'squat' && !session) console.log('[sim] no sessionId: squats feed the live view but count toward no vow');
   if (mode === 'jail') console.log('[sim] phone locked (jail=1)');
 
   let tick = 0;

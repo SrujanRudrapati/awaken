@@ -184,10 +184,15 @@ function announceStage(playerId: string, stage: Stage, status: 'started' | 'done
 
 // ── Body / Vitality (sensor windows) ────────────────────────────────────────
 
-async function beginSensorStage(session: Session, stage: 'body' | 'vitality', now: number): Promise<{ questId: string; endsAt: string }> {
+type SensorStageStart = { questId: string; endsAt: string; sessionId?: string };
+
+async function beginSensorStage(session: Session, stage: 'body' | 'vitality', now: number): Promise<SensorStageStart> {
   requireNotScored(session, stage);
   const running = session.sensor[stage];
-  if (running) return { questId: running.questId, endsAt: new Date(running.endsAt).toISOString() };
+  if (running) {
+    const sessionId = getQuest(running.questId)?.sessionId;
+    return { questId: running.questId, endsAt: new Date(running.endsAt).toISOString(), ...(sessionId ? { sessionId } : {}) };
+  }
   const type: QuestType = stage === 'body' ? BODY_TYPE[session.bodyVariant] : 'jumpingjack';
   const label = stage === 'body' ? `Max ${BODY_LABEL[session.bodyVariant]} in 60 s` : 'Jumping jacks for 60 s';
   const quest = await startQuest(session.playerId, {
@@ -205,7 +210,8 @@ async function beginSensorStage(session: Session, stage: 'body' | 'vitality', no
   }, SENSOR_WINDOW_MS);
   session.sensor[stage] = { questId: quest.id, endsAt, timer };
   announceStage(session.playerId, stage, 'started', { detail: label, endsAt });
-  return { questId: quest.id, endsAt: new Date(endsAt).toISOString() };
+  // Phone/Watch readings must send this sessionId (POST /api/readings?sessionId=) to count.
+  return { questId: quest.id, endsAt: new Date(endsAt).toISOString(), ...(quest.sessionId ? { sessionId: quest.sessionId } : {}) };
 }
 
 async function healthAverages(playerId: string): Promise<{ avgSteps: number | null; avgSleepHours: number | null }> {

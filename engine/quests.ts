@@ -304,7 +304,9 @@ function activate(quest: Quest): void {
   }
   // Always re-focus: another player may have used the Home Base since this quest was set.
   const progress = running?.id === quest.id ? running.progress : quest.progress;
-  setActiveQuest({ ...quest, progress });
+  const sessionId = setActiveQuest({ ...quest, progress });
+  const stored = getState().quests.get(quest.id);
+  if (stored && stored.sessionId !== sessionId) storeQuest({ ...stored, sessionId }); // start responses carry it
   void send(segNumber(progress));
 }
 

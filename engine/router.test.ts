@@ -63,7 +63,7 @@ describe('router', () => {
   it('publishes rep → quest.update per rep and quest.complete at the target', () => {
     setActiveQuest(quest());
 
-    pushups(3).forEach(routeReading);
+    pushups(3).forEach((r) => routeReading(r));
 
     const q1 = forQuest('q1');
     expect(q1.map((e) => e.type)).toEqual([
@@ -83,16 +83,16 @@ describe('router', () => {
   it('clears the quest once complete and stops counting for it', () => {
     setActiveQuest(quest({ target: 2 }));
 
-    pushups(6).forEach(routeReading);
+    pushups(6).forEach((r) => routeReading(r));
 
     expect(getActiveQuest('p1')).toBeUndefined();
     expect(forQuest('q1').filter((e) => e.type === 'rep')).toHaveLength(2);
   });
 
   it('passes through rep.rejected for shallow reps without adding progress', () => {
-    setActiveQuest(quest({ type: 'squat', target: 10 }));
+    const session = setActiveQuest(quest({ type: 'squat', target: 10 }));
 
-    squats(4).forEach(routeReading); // 4th simulator squat is half depth
+    squats(4).forEach((r) => routeReading(r, session)); // 4th simulator squat is half depth
 
     expect(forQuest('q1').at(-1)).toEqual({
       type: 'rep.rejected',
@@ -107,26 +107,26 @@ describe('router', () => {
     const original = quest();
     setActiveQuest(original);
 
-    pushups(2).forEach(routeReading);
+    pushups(2).forEach((r) => routeReading(r));
 
     expect(original.progress).toBe(0);
   });
 
   it('counts squats from the phone and ignores the Home Base pad for squat quests', () => {
-    setActiveQuest(quest({ id: 'q2', type: 'squat', target: 5 }));
+    const session = setActiveQuest(quest({ id: 'q2', type: 'squat', target: 5 }));
 
-    squats(3).forEach(routeReading);
+    squats(3).forEach((r) => routeReading(r, session));
     expect(getActiveQuest('p1')?.progress).toBe(3);
 
-    pushups(2).forEach(routeReading); // pad presses mean nothing to a squat quest
+    pushups(2).forEach((r) => routeReading(r)); // pad presses mean nothing to a squat quest
     expect(getActiveQuest('p1')?.progress).toBe(3);
   });
 
   it('adds push-ups from the pad and from the phone armband into one count', () => {
-    setActiveQuest(quest({ target: 10 }));
+    const session = setActiveQuest(quest({ target: 10 }));
 
-    pushups(2).forEach(routeReading);
-    phoneReps(3).forEach(routeReading); // armPushup: 2 calibration reps + 1
+    pushups(2).forEach((r) => routeReading(r));
+    phoneReps(3).forEach((r) => routeReading(r, session)); // armPushup: 2 calibration reps + 1
 
     expect(getActiveQuest('p1')?.progress).toBe(5);
     expect(
@@ -135,25 +135,65 @@ describe('router', () => {
   });
 
   it.each(['jumpingjack', 'situp'] as const)('routes %s quests to the phone accel verifier', (type) => {
-    setActiveQuest(quest({ type, target: 10 }));
+    const session = setActiveQuest(quest({ type, target: 10 }));
 
-    phoneReps(3).forEach(routeReading);
+    phoneReps(3).forEach((r) => routeReading(r, session));
 
     expect(getActiveQuest('p1')?.progress).toBe(3);
   });
 
   it('counts Watch accel readings like phone ones', () => {
-    setActiveQuest(quest({ type: 'squat', target: 10 }));
+    const session = setActiveQuest(quest({ type: 'squat', target: 10 }));
 
-    squats(3).map((r) => ({ ...r, source: 'watch' as const })).forEach(routeReading);
+    squats(3).map((r) => ({ ...r, source: 'watch' as const })).forEach((r) => routeReading(r, session));
 
     expect(getActiveQuest('p1')?.progress).toBe(3);
+  });
+
+  describe('sessions', () => {
+    it('each vow start gets a short sessionId, kept when the same vow is re-opened', () => {
+      const session = setActiveQuest(quest({ type: 'squat', target: 10 }));
+
+      expect(session).toMatch(/^[a-z0-9]{6,12}$/);
+      expect(getActiveQuest('p1')?.sessionId).toBe(session);
+      expect(setActiveQuest(quest({ type: 'squat', target: 10 }))).toBe(session);
+      expect(setActiveQuest(quest({ id: 'other', type: 'squat', target: 10 }))).not.toBe(session);
+    });
+
+    it('phone/watch readings without a valid session are ignored', () => {
+      setActiveQuest(quest({ type: 'squat', target: 10 }));
+
+      squats(3).forEach((r) => routeReading(r));
+      squats(3).forEach((r) => routeReading(r, 'bogus1'));
+
+      expect(getActiveQuest('p1')?.progress).toBe(0);
+      expect(events).toEqual([]);
+    });
+
+    it("a phone counts toward its own session's player, not whoever started last", () => {
+      const sessionA = setActiveQuest(quest({ id: 'qa', playerId: 'a', type: 'squat', target: 10 }));
+      setActiveQuest(quest({ id: 'qb', playerId: 'b', type: 'squat', target: 10 }));
+
+      squats(3).forEach((r) => routeReading(r, sessionA));
+
+      expect(getActiveQuest('a')?.progress).toBe(3);
+      expect(getActiveQuest('b')?.progress).toBe(0);
+    });
+
+    it('Home Base readings go to the Home Base session; a phone-only vow started later does not take it', () => {
+      setActiveQuest(quest({ id: 'pad', playerId: 'a', target: 10 }));
+      setActiveQuest(quest({ id: 'sq', playerId: 'b', type: 'squat', target: 10 }));
+
+      pushups(2).forEach((r) => routeReading(r));
+
+      expect(getActiveQuest('a')?.progress).toBe(2);
+    });
   });
 
   it('holds quest types that have no sensor verifier yet without publishing', () => {
     setActiveQuest(quest({ id: 'q3', type: 'jail', target: 30 }));
 
-    pushups(2).forEach(routeReading);
+    pushups(2).forEach((r) => routeReading(r));
 
     expect(getActiveQuest('p1')?.progress).toBe(0);
     expect(events).toEqual([]);
@@ -163,7 +203,7 @@ describe('router', () => {
     setActiveQuest(quest({ id: 'qa', playerId: 'a' }));
     setActiveQuest(quest({ id: 'qb', playerId: 'b' }));
 
-    pushups(1).forEach(routeReading);
+    pushups(1).forEach((r) => routeReading(r));
 
     expect(getActiveQuest('a')?.progress).toBe(0);
     expect(getActiveQuest('b')?.progress).toBe(1);
@@ -177,13 +217,13 @@ describe('router', () => {
     setActiveQuest(quest());
     clearActiveQuest('p1');
 
-    pushups(1).forEach(routeReading);
+    pushups(1).forEach((r) => routeReading(r));
 
     expect(forQuest('q1')).toEqual([]);
   });
 
   it('ignores readings when no quest has been started', () => {
-    pushups(2).forEach(routeReading);
+    pushups(2).forEach((r) => routeReading(r));
 
     expect(events).toEqual([]);
   });
@@ -193,7 +233,7 @@ describe('router', () => {
     setCompletionHandler((q) => completed.push(q));
     setActiveQuest(quest({ target: 2 }));
 
-    pushups(2).forEach(routeReading);
+    pushups(2).forEach((r) => routeReading(r));
 
     expect(completed).toEqual([expect.objectContaining({ id: 'q1', status: 'done', progress: 2 })]);
     expect(events.some((e) => e.type === 'quest.complete')).toBe(false);
@@ -205,9 +245,9 @@ describe('router', () => {
   });
 
   it('logs verified reps and rejected reps to Tiger with their source', () => {
-    setActiveQuest(quest({ type: 'squat', target: 10 }));
+    const session = setActiveQuest(quest({ type: 'squat', target: 10 }));
 
-    squats(4).forEach(routeReading);
+    squats(4).forEach((r) => routeReading(r, session));
 
     const kinds = vi.mocked(logEvent).mock.calls.map(([e]) => `${e.kind}:${e.verified}:${e.source}`);
     expect(kinds).toEqual([

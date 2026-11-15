@@ -84,7 +84,15 @@ Machine routes: `X-Sync-Token: <SYNC_TOKEN>` (`/api/health`, `/api/watch`) or `A
   "status": "active", "deadline": "2026-11-16T06:59:59.999Z", "difficulty": "normal", "kind": "manual"
 }
 ```
-Optional fields: `targetTime` (`"23:30"`, lights-out / bedtime vows), `topic` (read vows).
+Optional fields: `targetTime` (`"23:30"`, lights-out / bedtime vows), `topic` (read vows),
+`sessionId` (`"3f9a1c07"`, set when a sensor vow starts — see **Sensor sessions** below).
+
+**Sensor sessions.** Starting (or re-opening) a sensor vow returns it with a short `sessionId`; it also rides on
+`quest.update` events and `GET /api/quests/:id`. A **phone or Watch** streaming raw readings must POST them to
+`/api/readings?sessionId=<sessionId>` — readings without a valid session count toward nothing (they still feed the
+live `reading` view). **Home Base** readings need no session: they count toward the latest started vow the Home Base can
+verify (push-ups on the pad, jail, read, meditate, lights-out); a phone-only vow (squats…) never takes the Home Base.
+Re-opening the same vow keeps its `sessionId`.
 
 | `status` | `active` · `done` · `failed` · `cancelled` |
 |---|---|
@@ -177,7 +185,7 @@ Starting the same type again returns the already-active vow.
 
 | Step | Request | `stage` payload |
 |---|---|---|
-| Body begin | `{ playerId, "stage": "body", "action": "begin" }` | `{ "questId": "…", "endsAt": "…" }` — 60 s; reps counted by pad/phone/Watch (show the live `rep` events) |
+| Body begin | `{ playerId, "stage": "body", "action": "begin" }` | `{ "questId": "…", "endsAt": "…", "sessionId": "…" }` — 60 s; reps counted by pad/phone/Watch (show the live `rep` events); a phone must send `sessionId` |
 | Vitality begin | `{ …, "stage": "vitality", "action": "begin" }` | same (jumping jacks) |
 | Body/Vitality finish | `{ …, "action": "finish" }` (optional — closes itself at 60 s) | `{ "score": 64 }` |
 | Mind begin | `{ …, "stage": "mind", "action": "begin" }` | `{ "endsAt": "…", "question": { "id": "m5", "level": 2, "question": "If a train travels at 60 mph for 2 hours, how far does it go?", "options": ["90 miles","120 miles","150 miles","180 miles"] } }` |
@@ -275,7 +283,7 @@ Shards are **earn-only** (1 per 10 Proof kept, +20 per Ascension). No purchase U
 
 | Route | Caller | Auth |
 |---|---|---|
-| `POST /api/readings` | Home Base bridge, `/hunter` phone page | none (LAN/tunnel) |
+| `POST /api/readings[?sessionId=]` | Home Base bridge, `/hunter` phone page (`sessionId` required for phone/Watch to count) | none (LAN/tunnel) |
 | `POST /api/watch` `{ playerId, event: "rep"\|"quest.complete", exercise, count }` | Apple Watch app | `X-Sync-Token` |
 | `POST /api/health` (totals or sleep) | iPhone Shortcut (§6) | `X-Sync-Token` |
 | `POST /api/cron/daily` | midnight cron | Bearer CRON_SECRET |

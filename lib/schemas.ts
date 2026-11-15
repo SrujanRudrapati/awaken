@@ -118,6 +118,9 @@ export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 
 // ── Game state ──────────────────────────────────────────────────────────────
 
+/** Short id of a running sensor session (engine/router mints it on vow start). */
+export const SessionIdSchema = z.string().regex(/^[a-z0-9]{6,32}$/);
+
 export const QuestSchema = z.object({
   id: Id,
   playerId: Id,
@@ -135,6 +138,8 @@ export const QuestSchema = z.object({
   topic: z.string().trim().min(1).max(120).optional(),
   /** Local clock time "HH:MM" for lightsoutby / bedtime vows. */
   targetTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  /** Sensor session while the vow counts: phone/Watch readings must send it (POST /api/readings?sessionId=). */
+  sessionId: SessionIdSchema.optional(),
 });
 export type Quest = z.infer<typeof QuestSchema>;
 

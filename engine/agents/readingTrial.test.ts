@@ -24,7 +24,7 @@ const phoneIn = (seconds: number): Reading[] => Array.from({ length: seconds * 1
 
 async function readFor(seconds: number) {
   const quest = await startQuest('p1', { type: 'read', topic: 'The Hobbit, chapter 5', target: seconds });
-  phoneIn(seconds).forEach(routeReading);
+  phoneIn(seconds).forEach((r) => routeReading(r));
   await vi.waitFor(() => expect(getQuest(quest.id)?.progress).toBe(seconds));
   return quest;
 }

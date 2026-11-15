@@ -52,7 +52,8 @@ export function HunterClient() {
   const [voice, setVoice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-  const motionSender = useMotionSender();
+  const focusedSession = pickPhoneQuest(quests)?.sessionId;
+  const motionSender = useMotionSender(focusedSession);
 
   useEffect(() => {
     setPlayerId(rememberedPlayerId()); // eslint-disable-line react-hooks/set-state-in-effect -- reads browser-only state after hydration

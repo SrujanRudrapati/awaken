@@ -38,3 +38,15 @@ describe('phone motion helpers', () => {
     expect(rest).toHaveLength(MAX_BATCH);
   });
 });
+
+describe('readingsUrl', () => {
+  it("tags the phone's readings with the focused vow's session", async () => {
+    const { readingsUrl } = await import('./motion');
+    expect(readingsUrl('ab12cd34')).toBe('/api/readings?sessionId=ab12cd34');
+  });
+
+  it('without a session there is nothing to count toward (readings still feed the live view)', async () => {
+    const { readingsUrl } = await import('./motion');
+    expect(readingsUrl(undefined)).toBe('/api/readings');
+  });
+});

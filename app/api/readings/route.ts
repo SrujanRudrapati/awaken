@@ -1,5 +1,6 @@
 /**
- * POST /api/readings — bridge/simulator sends one Reading or a batch.
+ * POST /api/readings[?sessionId=<id>] — bridge/simulator/phone sends one Reading or a batch.
+ * Phone/Watch readings count only with the sessionId their vow start returned; Home Base readings need none.
  * Every reading goes to the engine; `reading` SSE events are throttled to 10/s
  * so the UI isn't flooded.
  */
@@ -9,7 +10,7 @@ import { routeReading } from '../../../engine/router';
 import { recordLight } from '../../../lib/homebaseLight';
 import { fail, ok } from '../../../lib/api-response';
 import { publish } from '../../../lib/bus';
-import { ReadingSchema } from '../../../lib/schemas';
+import { ReadingSchema, SessionIdSchema } from '../../../lib/schemas';
 
 const MAX_BATCH = 50;
 const PUBLISH_INTERVAL_MS = 100; // 10 events/s
@@ -31,6 +32,11 @@ function shouldPublish(now: number): boolean {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const rawSession = new URL(request.url).searchParams.get('sessionId');
+  const session = rawSession === null ? undefined : SessionIdSchema.safeParse(rawSession);
+  if (session && !session.success) return fail(400, 'sessionId is not a valid session id');
+  const sessionId = session?.data;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -49,7 +55,7 @@ export async function POST(request: Request): Promise<Response> {
   for (const reading of readings) {
     recordLight(reading); // dark-room minutes confirm Watch "lights out" vows
     try {
-      routeReading(reading);
+      routeReading(reading, sessionId);
     } catch (error) {
       console.error('[readings] router failed', error);
     }

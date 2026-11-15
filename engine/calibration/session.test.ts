@@ -36,7 +36,7 @@ function padPushups(count: number): Reading[] {
 
 async function runAll(playerId: string, pushups: number) {
   await submitCalibration(playerId, { stage: 'body', action: 'begin' });
-  padPushups(pushups).forEach(routeReading);
+  padPushups(pushups).forEach((r) => routeReading(r));
   await vi.advanceTimersByTimeAsync(SENSOR_WINDOW_MS); // the window closes itself
 
   await submitCalibration(playerId, { stage: 'vitality', action: 'begin' });
@@ -134,6 +134,16 @@ describe('Calibration session', () => {
     expect(b.stage).toEqual(a.stage);
     const question = (a.stage as { question: { id: string } }).question;
     await expect(submitCalibration('p1', { stage: 'mind', action: 'answer', questionId: question.id, answerIndex: 0 })).resolves.toBeDefined();
+  });
+
+  it('sensor windows return the sessionId the phone must tag its readings with', async () => {
+    await startCalibration('p1');
+
+    const step = await submitCalibration('p1', { stage: 'vitality', action: 'begin' });
+    const again = await submitCalibration('p1', { stage: 'vitality', action: 'begin' });
+
+    expect((step.stage as { sessionId?: string }).sessionId).toMatch(/^[a-f0-9]{8}$/);
+    expect((again.stage as { sessionId?: string }).sessionId).toBe((step.stage as { sessionId?: string }).sessionId);
   });
 
   it('guards: unknown person, no session, wrong question', async () => {

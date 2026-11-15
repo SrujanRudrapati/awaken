@@ -12,8 +12,8 @@ const reading = {
   t: 1, source: 'homebase', pad: 0, jail: 0, btn: 0, light: 500, snd: 100,
 };
 
-function post(body: unknown, raw = false): Request {
-  return new Request('http://localhost/api/readings', {
+function post(body: unknown, raw = false, query = ''): Request {
+  return new Request(`http://localhost/api/readings${query}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: raw ? (body as string) : JSON.stringify(body),
@@ -42,8 +42,21 @@ describe('POST /api/readings', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, data: { accepted: 1 }, error: null });
     expect(events).toEqual([{ type: 'reading', reading }]);
-    expect(routeReading).toHaveBeenCalledWith(reading);
+    expect(routeReading).toHaveBeenCalledWith(reading, undefined);
     off();
+  });
+
+  it('passes ?sessionId= to the router so phone/watch readings reach their own vow', async () => {
+    const phone = { t: 1, source: 'phone', ax: 0, ay: -1, az: 0 };
+
+    const res = await POST(post([phone], false, '?sessionId=ab12cd34'));
+
+    expect(res.status).toBe(200);
+    expect(routeReading).toHaveBeenCalledWith(phone, 'ab12cd34');
+  });
+
+  it('rejects a malformed sessionId', async () => {
+    expect((await POST(post(reading, false, '?sessionId=../x'))).status).toBe(400);
   });
 
   it('routes every reading in a batch but throttles reading events to 10/s', async () => {
@@ -85,7 +98,7 @@ describe('POST /api/readings', () => {
     const res = await POST(post({ t: 5, pad: 1, dist: 40, touch: 1 }));
 
     expect(res.status).toBe(200);
-    expect(routeReading).toHaveBeenCalledWith({ t: 5, source: 'homebase', pad: 1 });
+    expect(routeReading).toHaveBeenCalledWith({ t: 5, source: 'homebase', pad: 1 }, undefined);
   });
 
   it('accepts phone accel readings', async () => {
@@ -94,7 +107,7 @@ describe('POST /api/readings', () => {
     const res = await POST(post(phone));
 
     expect(res.status).toBe(200);
-    expect(routeReading).toHaveBeenCalledWith(phone);
+    expect(routeReading).toHaveBeenCalledWith(phone, undefined);
   });
 
   it('rejects an unknown source', async () => {
