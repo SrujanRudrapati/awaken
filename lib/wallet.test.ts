@@ -8,7 +8,7 @@ vi.mock('./db', () => ({
 }));
 
 import * as db from './db';
-import { earnShards, loadWallet, peekWallet } from './wallet';
+import { earnShards, loadWallet, peekWallet, resetWallets, spendShards } from './wallet';
 
 describe('wallet persistence', () => {
   beforeEach(() => {
@@ -36,3 +36,37 @@ describe('wallet persistence', () => {
     expect(landed.at(-1)?.earned).toBe(15);
   });
 });
+
+describe('wallet load on a slow or failing DB', () => {
+  const stored = { playerId: 'w2', balance: 80, earned: 100, shields: 1, cosmetics: ['halo'], lastHalveAt: null };
+
+  beforeEach(() => {
+    resetWallets();
+    vi.mocked(db.upsertWallet).mockReset().mockResolvedValue(undefined);
+  });
+
+  it('never stalls a kept vow: gives up on the DB after ~500 ms', async () => {
+    vi.mocked(db.getWallet).mockReturnValueOnce(new Promise(() => undefined)); // hung connection
+
+    const started = Date.now();
+    await loadWallet('w2');
+
+    expect(Date.now() - started).toBeLessThan(900);
+  });
+
+  it('a failed load never overwrites the stored wallet; the next good load merges what was earned meanwhile', async () => {
+    vi.mocked(db.getWallet).mockRejectedValueOnce(new Error('connect timeout'));
+    await loadWallet('w2');
+    earnShards('w2', 5);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(db.upsertWallet).not.toHaveBeenCalled(); // would have stored earned: 5 over 100
+
+    vi.mocked(db.getWallet).mockResolvedValueOnce(stored);
+    const wallet = await loadWallet('w2');
+
+    expect(wallet).toMatchObject({ balance: 85, earned: 105, shields: 1, cosmetics: ['halo'] });
+    await vi.waitFor(() => expect(db.upsertWallet).toHaveBeenLastCalledWith(expect.objectContaining({ earned: 105, balance: 85 })));
+    expect(spendShards('w2', 10)?.balance).toBe(75);
+  });
+});
+
