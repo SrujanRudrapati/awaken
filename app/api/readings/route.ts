@@ -1,7 +1,7 @@
 /**
  * POST /api/readings[?sessionId=<id>] — bridge/simulator/phone sends one Reading or a batch.
  * Phone/Watch readings count only with the sessionId their vow start returned; Home Base readings need none.
- * Auth: SYNC_TOKEN (X-Sync-Token / Bearer) or a request from this machine (bridge, simulator). The one exception is
+ * Auth: SYNC_TOKEN (X-Sync-Token / Bearer — the bridge and simulator send it). The one exception is
  * a phone/Watch-only batch with a sessionId (the /hunter page can't hold a secret): it can only count toward that vow.
  * Every reading goes to the engine; `reading` SSE events are throttled to 10/s
  * so the UI isn't flooded.
@@ -13,7 +13,7 @@ import { recordLight } from '../../../lib/homebaseLight';
 import { fail, ok } from '../../../lib/api-response';
 import { publish } from '../../../lib/bus';
 import { ReadingSchema, SessionIdSchema, type Reading } from '../../../lib/schemas';
-import { hasSyncToken, isLocalRequest } from '../_lib/auth';
+import { hasSyncToken } from '../_lib/auth';
 
 const MAX_BATCH = 50;
 const PUBLISH_INTERVAL_MS = 100; // 10 events/s
@@ -34,8 +34,13 @@ function shouldPublish(now: number): boolean {
   return true;
 }
 
+/**
+ * SYNC_TOKEN (bridge, simulator — both send it), or a phone/Watch-only batch tagged with its vow's
+ * sessionId. There is no "same machine" pass: Next keeps a client-sent X-Forwarded-For, so anyone on
+ * the venue Wi-Fi could claim to be 127.0.0.1.
+ */
 function isAllowed(request: Request, readings: readonly Reading[], sessionId: string | undefined): boolean {
-  if (isLocalRequest(request) || hasSyncToken(request)) return true;
+  if (hasSyncToken(request)) return true;
   return sessionId !== undefined && readings.every((r) => r.source !== 'homebase');
 }
 

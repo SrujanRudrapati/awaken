@@ -35,22 +35,6 @@ export function requireCronSecret(request: Request): Response | null {
   return secret && safeEqual(bearer(request), secret) ? null : fail(401, 'Unauthorized');
 }
 
-const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]', '::1', '::ffff:127.0.0.1']);
-/** Headers a tunnel or proxy adds for a remote client (cloudflared sets cf-connecting-ip). */
-const REMOTE_CLIENT_HEADERS = ['cf-connecting-ip', 'x-real-ip', 'true-client-ip'];
-
-/**
- * True for a request made on this machine (e.g. the bridge or simulator → http://localhost:3000): loopback Host,
- * no tunnel client header, and only loopback addresses in x-forwarded-for. Tunnel traffic also reaches the server
- * from localhost, but carries the public Host and cf-connecting-ip, so it is never treated as local.
- */
-export function isLocalRequest(request: Request): boolean {
-  if (!LOOPBACK.has(new URL(request.url).hostname)) return false;
-  if (REMOTE_CLIENT_HEADERS.some((h) => request.headers.has(h))) return false;
-  const forwarded = request.headers.get('x-forwarded-for');
-  return !forwarded || forwarded.split(',').every((ip) => LOOPBACK.has(ip.trim()));
-}
-
 /** True when the request carries the right SYNC_TOKEN (fail closed when unset). */
 export function hasSyncToken(request: Request): boolean {
   return requireSyncToken(request) === null;
