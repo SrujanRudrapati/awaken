@@ -11,7 +11,8 @@
     "test": "vitest run",
     "bridge": "tsx bridge/serial.ts",
     "demo:reset": "tsx scripts/demo-reset.ts",
-    "tunnel": "cloudflared tunnel --url http://localhost:3000"
+    "tunnel": "cloudflared tunnel --url http://localhost:3000",
+    "smoke:designer": "tsx scripts/smoke-designer.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
