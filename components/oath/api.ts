@@ -105,3 +105,46 @@ const SleepSchema = z.object({ nights: z.array(NightSummarySchema) });
 export async function fetchLastNight(personId: string): Promise<z.infer<typeof NightSummarySchema> | null> {
   return (await oathCall(`/api/sleep?playerId=${id(personId)}&days=2`, SleepSchema)).nights[0] ?? null;
 }
+
+// ── Calibration ─────────────────────────────────────────────────────────────
+export const CALIBRATION_STAGES = ['body', 'vitality', 'mind', 'focus'] as const;
+export type CalibrationStage = (typeof CALIBRATION_STAGES)[number];
+export type BodyVariant = 'pushup' | 'wallpushup' | 'chairsquat';
+
+const StageStateSchema = z.object({ status: z.string(), score: z.number().optional(), endsAt: z.string().optional() });
+const CalibrationResultSchema = z.object({
+  rank: RankSchema,
+  overall: z.number(),
+  scores: z.object({ body: z.number(), vitality: z.number(), mind: z.number(), focus: z.number() }),
+  recalibration: z.boolean().optional(),
+  bonusXp: z.number().optional(),
+});
+export type CalibrationResult = z.infer<typeof CalibrationResultSchema>;
+const SessionSchema = z.object({
+  bodyVariant: z.string().optional(),
+  stages: z.object({ body: StageStateSchema, vitality: StageStateSchema, mind: StageStateSchema, focus: StageStateSchema }),
+  result: CalibrationResultSchema.nullable().optional(),
+});
+export type CalibrationSession = z.infer<typeof SessionSchema>;
+
+export async function startCalibration(personId: string, input: { age?: number; bodyVariant: BodyVariant }): Promise<CalibrationSession> {
+  return (await oathCall('/api/calibration/start', z.object({ session: SessionSchema }), post({ playerId: personId, includeHealth: false, ...input }))).session;
+}
+
+const MindQuestionSchema = z.object({ id: z.string(), question: z.string(), options: z.array(z.string()).min(2) });
+export type MindQuestion = z.infer<typeof MindQuestionSchema>;
+const FocusTrialSchema = z.object({ i: z.number(), atMs: z.number(), kind: z.enum(['go', 'nogo']) });
+export type FocusTrial = z.infer<typeof FocusTrialSchema>;
+
+export const StagePayload = {
+  repBegin: z.object({ questId: z.string(), endsAt: z.string(), sessionId: z.string().optional() }),
+  score: z.object({ score: z.number().optional() }),
+  mindBegin: z.object({ endsAt: z.string(), question: MindQuestionSchema }),
+  mindAnswer: z.object({ correct: z.boolean(), next: MindQuestionSchema.nullable().optional(), done: z.boolean().optional(), score: z.number().optional() }),
+  focusBegin: z.object({ durationMs: z.number(), endsAt: z.string(), trials: z.array(FocusTrialSchema) }),
+  focusResult: z.object({ score: z.number(), hits: z.number().optional(), misses: z.number().optional(), falseAlarms: z.number().optional(), meanRtMs: z.number().nullable().optional() }),
+} as const;
+
+export function submitCalibration<T>(personId: string, step: Record<string, unknown>, stage: z.ZodType<T>): Promise<{ session: CalibrationSession; stage: T }> {
+  return oathCall('/api/calibration/submit', z.object({ session: SessionSchema, stage }), post({ playerId: personId, ...step }));
+}
